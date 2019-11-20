@@ -1,0 +1,8 @@
+At the beginning of the round, everybody rolls the die, and the turn ranking goes from highest to lowest.
+
+Then, a queue is created with the aliases of the players, retrieved from the getSender() method.
+Once the queue is successfully created, 
+
+Peek at the front of the queue and allow that player to play.
+Once the player has rolled and moved, dequeue the player and enqueue them at the end of the queue.
+Repeat until a player wins.
