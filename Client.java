@@ -5,7 +5,7 @@ import javax.swing.*;
 
 public class Client extends JFrame {
    private final int PORT = 4242;
-   private String IP = "129.21.159.13";
+   private String IP = "129.21.157.229";
    private String alias;
    private BufferedReader rin;
    private PrintWriter pout;
@@ -14,7 +14,9 @@ public class Client extends JFrame {
    private Socket sock;
    private RollRequest rr;
    private JTextField jtfAlias;
-   
+   private JButton jbRoll;
+   private String readLock = "readLock";
+   private String writeLock = "writeLock";
    public Client(){
       JPanel jpWest = new JPanel();
       //Creating the alias text field
@@ -29,13 +31,15 @@ public class Client extends JFrame {
          public void actionPerformed(ActionEvent ae) {
             try{
                sock = new Socket(IP, PORT);
-               System.out.println("Connected to " + IP);
+               //System.out.println("Connected to " + IP);
                rin = new BufferedReader(new InputStreamReader(sock.getInputStream()));
                pout = new PrintWriter(sock.getOutputStream(), true);
+               //ois = new ObjectInputStream(sock.getInputStream());
                oos = new ObjectOutputStream(sock.getOutputStream());
                alias = jtfAlias.getText();
                pout.println(alias + " connected.");
                new ChatListener().start();
+               new ObjectListener().start();
             } catch(UnknownHostException uhe) {
                System.err.println("Error: unknown host.");
                uhe.printStackTrace();
@@ -58,7 +62,7 @@ public class Client extends JFrame {
          }
       });
       //Creating the roll button
-      JButton jbRoll = new JButton("Roll Dice");
+      jbRoll = new JButton("Roll Dice");
       jbRoll.addActionListener(new ActionListener() {
          
          /**
@@ -66,7 +70,7 @@ public class Client extends JFrame {
           * pressed.
           */
          public void actionPerformed(ActionEvent ae){
-            rr = new RollRequest(alias);
+            rr = new RollRequest(alias, jbRoll);
             try{
                oos.writeObject(rr);
             } catch(NullPointerException npe) {
@@ -77,6 +81,7 @@ public class Client extends JFrame {
             }
          }
       });
+      jbRoll.setEnabled(false);
       jpWest.add(jtfAlias);
       jpWest.add(jbRoll);
       jpWest.add(jbConnect);
@@ -101,8 +106,10 @@ public class Client extends JFrame {
       public void run(){
          String line;
          try{
-            while((line = rin.readLine()) != null){
-               System.out.println(line);
+            synchronized(readLock){
+               while((line = rin.readLine()) != null){
+                  System.out.println(line);
+               }
             }
          } catch(SocketException se) {
             System.err.println("Connection closed.");
@@ -112,5 +119,33 @@ public class Client extends JFrame {
             ioe.printStackTrace();
          }
       } //end of run
+   }
+   
+   protected class ObjectListener extends Thread{
+      private ControlToken ct;
+      public void run(){
+         try{
+            ois = new ObjectInputStream(sock.getInputStream());
+         } catch(IOException ioe) {
+            ioe.printStackTrace();
+         }
+         while(true){
+            try{
+               synchronized(readLock){
+                  ct = (ControlToken)ois.readObject();
+               }
+            } catch(ClassNotFoundException cnfe) {
+               cnfe.printStackTrace();
+            } catch(IOException ioe) {
+               ioe.printStackTrace();
+            }
+            if(ct.getCode() == 1){
+               jbRoll.setEnabled(true);
+            }
+            if(ct.getCode() == (-1) ){
+               jbRoll.setEnabled(false);
+            }
+         }
+      }
    }
 }
