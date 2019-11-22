@@ -8,8 +8,6 @@ public class Server extends JFrame{
    private Vector<Socket> clients = new Vector<Socket>();
    private Vector<ClientHandler> clientThreads = new Vector<ClientHandler>();
    private final int PORT = 4242;
-   private JTextField jtfConsole;
-   private JButton jbRoll;
    /**
     * The server's default constructor.
     * Accepts client connections.
@@ -20,6 +18,7 @@ public class Server extends JFrame{
       try{
          Socket cs = null;
          ss = new ServerSocket(PORT);
+         //Print server information
          InetAddress ina = InetAddress.getLocalHost();
          System.out.println("Host name: " + ina.getHostName());
          System.out.println("IP Address: " + ina.getHostAddress());
@@ -46,15 +45,16 @@ public class Server extends JFrame{
    } //end of main method
    
    /**
-    * Prints a String to all clients in the clients Vector.
+    * Prints a String to all clients in the clientThreads vector.
+    * @param msg the message to be sent
     */
    private void sendToAll(String msg){
-      for(Socket s: clients){
+      for(ClientHandler ch: clientThreads){
          try{
-            //Creates a PrintWriter using the socket
-            PrintWriter opw = new PrintWriter(new OutputStreamWriter(s.getOutputStream()), true);
+            //Get the client's ObjectOutputStream
+            ObjectOutputStream oos = ch.getOOS();
             //Print the message to the client
-            opw.println(msg);
+            oos.writeObject(new DataWrapper(0, msg));
          } catch(IOException ioe) {
             System.out.println("IOException occurred: " + ioe.getMessage());
             ioe.printStackTrace();
@@ -62,6 +62,11 @@ public class Server extends JFrame{
       }
    } //end of sendToAll method
    
+   /**
+    * Searches the clientThreads vector for a client name.
+    * @param client the name of the client
+    * @return String string detailing if client is in vector or not
+    */
    public String searchClients(String client){
       for(ClientHandler ch:clientThreads){
          if(ch.getName().equals(client)){
@@ -71,6 +76,11 @@ public class Server extends JFrame{
       return String.format("%s is not connected.\n", client);
    }
    
+   /**
+    * Gets the index of a client in the clientThreads vector from a client's name.
+    * @param client the name of the client
+    * @return int the index of the player. Returns -1 if not found.
+    */
    public int getIndex(String client){
       for(ClientHandler ch:clientThreads){
          if(ch.getName().equals(client)){
@@ -79,13 +89,33 @@ public class Server extends JFrame{
       }
       return -1;
    }
+   
+   /* Works by splitting command string by spaces, removing first element, and
+    * re-building the String with spaces, then trimming it. For some reason it
+    * also alters the array passed in the args.
+    */
+   public String getNameFromStringArray(String[] stringArray){
+      String[] sa = stringArray;
+      String name = "";
+      sa[0] = "";
+      for(String s: sa){
+         name += s + " ";
+      }
+      name = name.trim();
+      return name;
+   }
+   
+   //A thread class to handle clients.
    protected class ClientHandler extends Thread {
-      private BufferedReader rin;
-      private PrintWriter pout;
       private ObjectInputStream ois;
       private ObjectOutputStream oos;
       private Socket mySocket;
       private RollRequest srr;
+      
+      /**
+       * Constructor for the ClientHandler class.
+       * @param s the client's socket
+       */
       public ClientHandler(Socket s){
          mySocket = s;
       }
@@ -97,18 +127,21 @@ public class Server extends JFrame{
       public void run(){
          boolean nameGet = false;
          try{
-            rin = new BufferedReader(new InputStreamReader(mySocket.getInputStream()));
-            pout = new PrintWriter(new OutputStreamWriter(mySocket.getOutputStream()), true);
             ois = new ObjectInputStream(mySocket.getInputStream());
             oos = new ObjectOutputStream(mySocket.getOutputStream());
             //Listen for RollRequest objects.
             while(true){
                if(!nameGet){
-                  //Get the name from the BufferedReader
-                  String line = rin.readLine();
+                  //Get the name from the InputStream
+                  DataWrapper dw = (DataWrapper) ois.readObject();
+                  String line = "";
+                  if(dw.getType() == DataWrapper.STRINGCODE){
+                     line = dw.getMessage();
+                  }
                   sendToAll(line);
                   System.out.println(line);
-                  /* Following code splits the line into an array and removes
+                  /* Following code extracts the name from the "CLIENT connected"
+                   * String. Works by splitting the String into an array and removing
                    * the last element.
                    */
                   String[] aliasArray = line.split("\\s+");
@@ -126,10 +159,9 @@ public class Server extends JFrame{
                   nameGet = true;
                }
                srr = (RollRequest)ois.readObject();
-               jbRoll = srr.getButton();
-               //Create a roll result and send it to all clients.
+               //Obtain the roll result and send it to all clients.
                sendToAll(String.format("%s rolled a %d!", srr.getSender(), rollResult()));
-            }
+            } //end of while loop
          } catch(ClassNotFoundException cnfe) {
             System.err.println("Error: class not found " + cnfe.getMessage());
          } catch(SocketException se) {
@@ -142,75 +174,118 @@ public class Server extends JFrame{
       } //end of run method
       
       /**
-       * Returns a number from 1 to 6.
-       * @return a number from 1 to 6.
+       * Returns a random number from 1 to 6.
+       * @return a random number from 1 to 6.
        */
       public int rollResult(){
          Random rand = new Random();
          return rand.nextInt(6) + 1;
       }
-
+      
+      /**
+       * Sends a ControlToken to this ClientHandler's socket, telling
+       * it to enable the roll button.
+       */
       public void enableClient(){
          try{
-            oos.writeObject(new ControlToken(1));
+            oos.writeObject(new DataWrapper(2, new ControlToken(1)));
             oos.flush();
          } catch(IOException ioe) {
             ioe.printStackTrace();
          }
       }
       
+      /**
+       * Sends a ControlToken to this ClientHandler's socket, telling
+       * it to disable the roll button.
+       */
+      public void disableClient(){
+         try{
+            oos.writeObject(new DataWrapper(2, new ControlToken(0)));
+            oos.flush();
+         } catch(IOException ioe) {
+            ioe.printStackTrace();
+         }
+      }
+      
+      /**
+       * Returns the ObjectOutputStream of this ClientHandler.
+       */
+      public ObjectOutputStream getOOS(){
+         return oos;
+      }
+      
    } //end of ClientHandler class
    
+   //Thread class for server console
    protected class ConsoleHandler extends Thread{
       private Scanner scan;
       
+      /**
+       * Default constructor for the ConsoleHandler class.
+       */
       public ConsoleHandler(){
          scan = new Scanner(System.in);
       }
       
+      /**
+       * Run method for the ConsoleHandler class.
+       */
       public void run(){
          System.out.println("Console started");
          while(true){
-            String cmd = scan.nextLine();
-            String[] cmdSplit = cmd.split("\\s+");
+            String consoleLine = scan.nextLine();
+            String[] cmdSplit = consoleLine.split("\\s+");
+            //Store the first element in a String command
+            String command = cmdSplit[0];
+            String name = getNameFromStringArray(cmdSplit);
+            System.out.println("Command: " + command);
+            /* COMMANDS BELOW
+             * printnames: Prints the current list of clients
+             *
+             * search name: Searches for the client in the Vector and prints a String
+             *
+             * enable name: If the player is in the Vector, sends a ControlToken telling
+             * them to enable their button.
+             *
+             * disable name: If the player is in the Vector, sends a ControlToken telling
+             * them to disable their button.
+             */
+            
             //Prints the current list of clients
-            if(cmd.equals("printnames")){
+            if(consoleLine.equals("printnames")){
                if(clientThreads.size() == 0){
                   System.out.println("No clients are connected.");
                }
                for(ClientHandler ch:clientThreads){
-                  System.out.printf("Index: %-3d | Name: %-15s\n", clientThreads.indexOf(ch), ch.getName());
+                  System.out.printf("Index: %-3d | Name: \"%s\"\n", clientThreads.indexOf(ch), ch.getName());
                }
             }
+            
             //Searches for a client in the Vector
-            /* Works by splitting command string by spaces, removing first element, and
-             * re-building the String with spaces. Then passes a trimmed String to the
-             * searchClients() method.
-             */
-            if(cmdSplit[0].equals("search")){
-               String name = "";
-               cmdSplit[0] = "";
-               for(String s: cmdSplit){
-                  name += s + " ";
-               }
-               name = name.trim();
+            if(command.equals("search")){
                System.out.print(searchClients(name));
-            } //end of name search command
+            }
+            
             //Enable roll for a player
-            if(cmdSplit[0].equals("enable")){
-               String name = "";
-               cmdSplit[0] = "";
-               for(String s: cmdSplit){
-                  name += s + " ";
-               }
-               name = name.trim();
+            if(command.equals("enable")){
                if(getIndex(name) != -1){
+                  System.out.printf("Attempting to enable %s's button...\n", name);
                   clientThreads.get(getIndex(name)).enableClient();
                } else {
                   System.out.printf("Could not enable button, client %s not found.\n", name);
                }
             }
-         }
-      }
-   }
+            
+            if(command.equals("disable")){
+               if(getIndex(name) != -1){
+                  System.out.printf("Attempting to disable %s's button...\n", name);
+                  clientThreads.get(getIndex(name)).disableClient();
+               } else {
+                  System.out.printf("Could not disable button, client %s not found.\n", name);
+               }
+            }
+         } //end of while loop
+      } //end of run method
+   } //end of ConsoleHandler class
 } //end of Server class

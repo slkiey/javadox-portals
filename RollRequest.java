@@ -1,20 +1,26 @@
+/**
+ * A token class representing a request to roll.
+ * Sent by a client when they click their roll button.
+ */
 import java.io.*;
-import javax.swing.*;
 
 public class RollRequest implements Serializable{
    private String sender;
-   private JButton jbRoll;
    
-   public RollRequest(String s, JButton _jbRoll){
+   /**
+    * Constructor for the RollRequest class.
+    * @param s the name of the sender
+    */
+   public RollRequest(String s){
       sender = s;
-      jbRoll = jbRoll;
    }
    
+   /**
+    * Returns the name of the sender.
+    * @return sender the name of the sender.
+    */
    public String getSender(){
       return sender;
    }
    
-   public JButton getButton(){
-      return jbRoll;
-   }
 }
