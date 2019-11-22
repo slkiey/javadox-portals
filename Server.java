@@ -90,9 +90,11 @@ public class Server extends JFrame{
       return -1;
    }
    
-   /* Works by splitting command string by spaces, removing first element, and
-    * re-building the String with spaces, then trimming it. For some reason it
-    * also alters the array passed in the args.
+   /** 
+    * Extracts a name from a String array, removing the first element.
+    * Method written for processing names from console.
+    * @param stringArray the String array
+    * @return String the extracted name
     */
    public String getNameFromStringArray(String[] stringArray){
       String[] sa = stringArray;
@@ -131,9 +133,9 @@ public class Server extends JFrame{
             oos = new ObjectOutputStream(mySocket.getOutputStream());
             //Listen for RollRequest objects.
             while(true){
+               DataWrapper dw = (DataWrapper) ois.readObject();
                if(!nameGet){
-                  //Get the name from the InputStream
-                  DataWrapper dw = (DataWrapper) ois.readObject();
+                  //Get the name from the InputStream if not retrieved already
                   String line = "";
                   if(dw.getType() == DataWrapper.STRINGCODE){
                      line = dw.getMessage();
@@ -157,17 +159,37 @@ public class Server extends JFrame{
                   this.setName(alias);
                   System.out.println("Thread alias: " + alias);
                   nameGet = true;
+               } else {
+                  switch(dw.getType()){
+                     //Handle messages
+                     case DataWrapper.STRINGCODE:
+                        //Send client messages to all clients, appending sender name
+                        String fmtMessage = String.format("%s: %s", this.getName(), dw.getMessage());
+                        sendToAll(fmtMessage);
+                        System.out.println(fmtMessage);
+                        break;
+                     //Handle RollRequest objects
+                     case DataWrapper.RRCODE:
+                        srr = dw.getRR();
+                        String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rollResult());
+                        //Obtain the roll result and send it to all clients.
+                        sendToAll(fmtRR);
+                        System.out.println(fmtRR);
+                        break;
+                     default:
+                        System.err.println("Error: invalid DataWrapper.type");
+                  }
                }
-               srr = (RollRequest)ois.readObject();
-               //Obtain the roll result and send it to all clients.
-               sendToAll(String.format("%s rolled a %d!", srr.getSender(), rollResult()));
+               
             } //end of while loop
          } catch(ClassNotFoundException cnfe) {
             System.err.println("Error: class not found " + cnfe.getMessage());
          } catch(SocketException se) {
             System.err.println(this.getName() + " disconnected.");
+            clientThreads.remove(getIndex(this.getName()));
          } catch(EOFException eofe) {
             System.err.println(this.getName() + " disconnected.");
+            clientThreads.remove(getIndex(this.getName()));
          } catch(IOException ioe) {
             ioe.printStackTrace();
          }
@@ -210,6 +232,7 @@ public class Server extends JFrame{
       
       /**
        * Returns the ObjectOutputStream of this ClientHandler.
+       * @return oos this ClientHandler's ObjectOutputStream
        */
       public ObjectOutputStream getOOS(){
          return oos;
@@ -223,6 +246,7 @@ public class Server extends JFrame{
       
       /**
        * Default constructor for the ConsoleHandler class.
+       * Creates a scanner to read from console.
        */
       public ConsoleHandler(){
          scan = new Scanner(System.in);
@@ -230,6 +254,7 @@ public class Server extends JFrame{
       
       /**
        * Run method for the ConsoleHandler class.
+       * Processes commands from the console.
        */
       public void run(){
          System.out.println("Console started");
@@ -250,6 +275,8 @@ public class Server extends JFrame{
              *
              * disable name: If the player is in the Vector, sends a ControlToken telling
              * them to disable their button.
+             *
+             * kick name: Close the socket for this player.
              */
             
             //Prints the current list of clients
@@ -277,12 +304,28 @@ public class Server extends JFrame{
                }
             }
             
+            //Disable roll for a player
             if(command.equals("disable")){
                if(getIndex(name) != -1){
                   System.out.printf("Attempting to disable %s's button...\n", name);
                   clientThreads.get(getIndex(name)).disableClient();
                } else {
                   System.out.printf("Could not disable button, client %s not found.\n", name);
+               }
+            }
+            
+            //Kick a player.
+            if(command.equals("kick")){
+               if(getIndex(name) != -1){
+                  System.out.printf("Attempting to kick %s...\n", name);
+                  try{
+                     clientThreads.get(getIndex(name)).mySocket.close();
+                  } catch(IOException ioe) {
+                     System.err.println("Error: couldn't kick " + name);
+                     ioe.printStackTrace();
+                  }
+               } else {
+                  System.out.printf("Could not kick client %s, client %s not connected.", name, name);
                }
             }
          } //end of while loop
