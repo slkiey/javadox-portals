@@ -13,7 +13,7 @@ public class ControlToken implements Serializable{
    
    /**
     * A constructor for the ControlToken class.
-    * @param _opcdoe the int specifying which action should be taken.
+    * @param _opcode the int specifying which action should be taken.
     */
    public ControlToken(int _opcode){
       opcode = _opcode;
