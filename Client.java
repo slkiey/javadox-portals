@@ -108,6 +108,10 @@ public class Client extends JFrame {
       //Creating the JTextArea for displaying messages, including a border
       jtaDisplayMsgs = new JTextArea(0, 15);
       jtaDisplayMsgs.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder()));
+      //Creating  the JScrollPanel to house the JTextArea for messages
+      JScrollPane jspScroll = new JScrollPane(jtaDisplayMsgs);
+      jspScroll.createVerticalScrollBar();
+      jspScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
       jtaDisplayMsgs.setEnabled(false);
       //Creating the JTextField for sending messages
       JTextField jtfSendMsgs = new JTextField(15);
@@ -121,7 +125,7 @@ public class Client extends JFrame {
          }
       });
       
-      jpWest.add(jtaDisplayMsgs, BorderLayout.CENTER);
+      jpWest.add(jspScroll, BorderLayout.CENTER);
       jpWest.add(jtfSendMsgs, BorderLayout.SOUTH);
       //Adding padding to make the West area look nicer
       jpWest.setBorder(new EmptyBorder(0, 10, 5, 10));
@@ -254,7 +258,7 @@ public class Client extends JFrame {
          if(jtc.getText().equals(initialString)){
             jtc.setText("");
          }
-         //jtc.removeFocusListener(this);
+        
       }
    }
 }
