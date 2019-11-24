@@ -9,11 +9,13 @@ public class DataWrapper implements Serializable{
     * Code for a RollRequest: 1
     * Code for a ControlToken: 2
     */
-   static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2;
+   static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2, GCODE = 3;
    private int type;
    String message;
+   String gameMessage;
    RollRequest rr;
    ControlToken ct;
+   boolean isGameMessage;
    
    /** 
     * A constructor for the DataWrapper class.
@@ -21,9 +23,11 @@ public class DataWrapper implements Serializable{
     * @param type the type code of Object being sent
     * @param message the message to be sent.
     */
-   public DataWrapper(int type, String message){
+   public DataWrapper(int type, String message, boolean _isGameMessage ){
+   
       this.type = type;
       this.message = message;
+      this.isGameMessage = _isGameMessage;
    }
    
    /** 
@@ -47,6 +51,7 @@ public class DataWrapper implements Serializable{
       this.type = type;
       this.ct = ct;
    }
+   
    
    /**
     * Returns a code representing the Object type.
@@ -79,5 +84,6 @@ public class DataWrapper implements Serializable{
    public ControlToken getCT(){
       return ct;
    }
+   
    
 }

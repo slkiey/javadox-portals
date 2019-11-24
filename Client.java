@@ -3,6 +3,7 @@ import java.net.*;
 import java.awt.event.*;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
+import java.awt.Color;
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
 import javax.swing.border.EmptyBorder;
@@ -17,8 +18,10 @@ public class Client extends JFrame {
    private RollRequest rr;
    private JTextField jtfAlias;
    private JTextArea jtaDisplayMsgs;
+   private JTextArea jtaDisplayGM;
    private JButton jbRoll;
    private StringBuilder chatLog = new StringBuilder();
+   private StringBuilder gmLog = new StringBuilder();
    
    /**
     * Default constructor for the Client class.
@@ -103,16 +106,38 @@ public class Client extends JFrame {
       jpNorth.add(jbConnect);
       jpNorth.add(jbDisconnect);
       add(jpNorth, BorderLayout.NORTH);
-      //SOUTH Panel: Incoming Text and Send Message
+      
+      //WEST Panel: Incoming Text and Send Message
       JPanel jpWest = new JPanel(new BorderLayout(5, 5));
       //Creating the JTextArea for displaying messages, including a border
       jtaDisplayMsgs = new JTextArea(0, 15);
-      jtaDisplayMsgs.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder()));
-      //Creating  the JScrollPanel to house the JTextArea for messages
+      jtaDisplayMsgs.setLineWrap(true);
+      jtaDisplayMsgs.setWrapStyleWord(true);
+      jtaDisplayMsgs.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder())); 
+      //Creating the JScrollPanel to house the JTextArea for messages
       JScrollPane jspScroll = new JScrollPane(jtaDisplayMsgs);
       jspScroll.createVerticalScrollBar();
       jspScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
       jtaDisplayMsgs.setEnabled(false);
+      
+      //EAST Panel: Incoming Game Message from Server
+      JPanel jpEast = new JPanel(new BorderLayout(5,5));
+      //Creating the JTextArea for displaying Game Message, including a border
+      JLabel jlPlayerMoves = new JLabel("Player Moves");
+      jlPlayerMoves.setHorizontalAlignment(JLabel.CENTER);
+      jlPlayerMoves.setBackground(new Color(255,155,255));
+      jlPlayerMoves.setOpaque(true);
+      jlPlayerMoves.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder())); 
+      jtaDisplayGM = new JTextArea(0, 15);
+      jtaDisplayGM.setLineWrap(true);
+      jtaDisplayGM.setWrapStyleWord(true);
+      jtaDisplayGM.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder())); 
+      //Creating the JScrollPanel to house the JTextArea for Game Messages
+      JScrollPane jspScrollGM = new JScrollPane(jtaDisplayGM);
+      jspScrollGM.createVerticalScrollBar();
+      jspScrollGM.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+      jtaDisplayGM.setEnabled(false);
+      
       //Creating the JTextField for sending messages
       JTextField jtfSendMsgs = new JTextField(15);
       //Binding the Enter key to sendMessage
@@ -127,13 +152,18 @@ public class Client extends JFrame {
       
       jpWest.add(jspScroll, BorderLayout.CENTER);
       jpWest.add(jtfSendMsgs, BorderLayout.SOUTH);
+      jpEast.add(jlPlayerMoves, BorderLayout.NORTH);
+      jpEast.add(jspScrollGM, BorderLayout.CENTER);
       //Adding padding to make the West area look nicer
       jpWest.setBorder(new EmptyBorder(0, 10, 5, 10));
+      jpEast.setBorder(new EmptyBorder(0, 10, 30, 10));
       add(jpWest, BorderLayout.WEST);
+      add(jpEast,BorderLayout.EAST);
       //JFrame Initialization
-      pack();
+      setSize(864,486);
       setDefaultCloseOperation(EXIT_ON_CLOSE);
       setVisible(true);
+      setLocationRelativeTo(null);
    }
    
    /**
@@ -151,7 +181,7 @@ public class Client extends JFrame {
     */
    public void sendMessage(String message){
       try{
-         oos.writeObject(new DataWrapper(0, message));
+         oos.writeObject(new DataWrapper(0, message, false));
       } catch(SocketException se) {
          System.err.println("Error: not connected. Message not sent.");
       } catch(NullPointerException npe) {
@@ -194,9 +224,20 @@ public class Client extends JFrame {
             switch(dw.getType()){
                //Handle messages
                case DataWrapper.STRINGCODE:
+                  
                   String incomingMsg = dw.getMessage();
-                  chatLog.append(incomingMsg + "\n");
-                  jtaDisplayMsgs.setText(chatLog.toString());
+                  
+                  if(dw.isGameMessage) {
+                     gmLog.append(incomingMsg + "\n");
+                     jtaDisplayGM.setText(gmLog.toString());
+                     //this is a GameMessage  
+                     //Display on gameMessage window aka new JTextArea in new JScrollPane
+                  } else {
+                     //this is a ChatMessage
+                     
+                     chatLog.append(incomingMsg + "\n");
+                     jtaDisplayMsgs.setText(chatLog.toString());
+                  }
                   //System.out.println(dw.getMessage());
                   break;
                //Handle ControlToken objects

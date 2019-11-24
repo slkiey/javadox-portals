@@ -54,7 +54,25 @@ public class Server extends JFrame{
             //Get the client's ObjectOutputStream
             ObjectOutputStream oos = ch.getOOS();
             //Print the message to the client
-            oos.writeObject(new DataWrapper(0, msg));
+            oos.writeObject(new DataWrapper(0, msg, false));
+         } catch(IOException ioe) {
+            System.out.println("IOException occurred: " + ioe.getMessage());
+            ioe.printStackTrace();
+         }
+      }
+   } //end of sendToAll method
+   
+  /**
+    * Prints a GameMessage string to all clients in the clientThreads vector.
+    * @param msg the message to be sent
+    */
+   private void sendGMToAll(String msg){
+      for(ClientHandler ch: clientThreads){
+         try{
+            //Get the client's ObjectOutputStream
+            ObjectOutputStream oos = ch.getOOS();
+            //Print the message to the client
+            oos.writeObject(new DataWrapper(0, msg, true));
          } catch(IOException ioe) {
             System.out.println("IOException occurred: " + ioe.getMessage());
             ioe.printStackTrace();
@@ -163,6 +181,8 @@ public class Server extends JFrame{
                   switch(dw.getType()){
                      //Handle messages
                      case DataWrapper.STRINGCODE:
+                     
+                     
                         //Send client messages to all clients, appending sender name
                         String fmtMessage = String.format("%s: %s", this.getName(), dw.getMessage());
                         sendToAll(fmtMessage);
@@ -173,7 +193,7 @@ public class Server extends JFrame{
                         srr = dw.getRR();
                         String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rollResult());
                         //Obtain the roll result and send it to all clients.
-                        sendToAll(fmtRR);
+                        sendGMToAll(fmtRR);
                         System.out.println(fmtRR);
                         break;
                      default:
