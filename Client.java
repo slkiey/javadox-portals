@@ -28,6 +28,7 @@ public class Client extends JFrame {
     * Handles GUI.
     */
    public Client(){
+      
       //NORTH Panel: Alias, Roll Dice, IP, Connect, Disconnect
       JPanel jpNorth = new JPanel();
       //Creating the alias text field
@@ -38,35 +39,6 @@ public class Client extends JFrame {
       JTextField jtfIP = new JTextField("Enter IP Address", 10);
       jtfIP.setToolTipText("Enter IP Address here");
       jtfIP.addFocusListener(new FocListener());
-      //Creating the connect button
-      JButton jbConnect = new JButton("Connect");
-      jbConnect.addActionListener(new ActionListener() {
-         /**
-          * Attempts to connect to server and instantiates streams.
-          */
-         public void actionPerformed(ActionEvent ae) {
-            try{
-               ip = jtfIP.getText();
-               System.out.printf("Attempting to connect..\nIP Address: %s\nPort: %d\n", ip, PORT);
-               sock = new Socket(ip, PORT);
-               //Hangs if ois is created here instead of in the ObjectListener class?
-               //ois = new ObjectInputStream(sock.getInputStream());
-               oos = new ObjectOutputStream(sock.getOutputStream());
-               alias = jtfAlias.getText();
-               sendMessage(alias + " connected.");
-               new ObjectListener().start();
-            } catch(ConnectException ce) {
-               System.err.println("Error: couldn't connect.");
-               ce.printStackTrace();
-            } catch(UnknownHostException uhe) {
-               System.err.println("Error: unknown host.");
-               uhe.printStackTrace();
-            } catch(IOException ioe) {
-               System.err.println("Error: couldn't connect.");
-               ioe.printStackTrace();
-            }
-         }
-      });
       //Creating the disconnect button
       JButton jbDisconnect = new JButton("Disconnect");
       jbDisconnect.addActionListener(new ActionListener() {
@@ -79,6 +51,46 @@ public class Client extends JFrame {
             }
          }
       });
+      jbDisconnect.setEnabled(false);
+      //Creating the connect button
+      JButton jbConnect = new JButton("Connect");
+      jbConnect.addActionListener(new ActionListener() {
+         /**
+          * Attempts to connect to server and instantiates streams.
+          */
+         public void actionPerformed(ActionEvent ae) {
+            try{
+               ip = jtfIP.getText();
+               alias = jtfAlias.getText();
+               if(alias.length() > 15) {
+                  System.out.println("Please enter a name less than or equal to 15 characters long.");
+               }
+               if(ip.equals("Enter IP Address")) {
+                  System.out.println("Please enter an IP address.");
+               }
+               else {
+                  System.out.printf("Attempting to connect..\nIP Address: %s\nPort: %d\n", ip, PORT);
+                  sock = new Socket(ip, PORT);
+                  //Hangs if ois is created here instead of in the ObjectListener class?
+                  //ois = new ObjectInputStream(sock.getInputStream());
+                  oos = new ObjectOutputStream(sock.getOutputStream());
+                  sendMessage(alias + " connected.");
+                  new ObjectListener().start();
+                  jbDisconnect.setEnabled(true);
+               }
+            } catch(ConnectException ce) {
+               System.err.println("Error: couldn't connect.");
+               ce.printStackTrace();
+            } catch(UnknownHostException uhe) {
+               System.err.println("Error: unknown host. Please make sure the IP you entered is valid.");
+               uhe.printStackTrace();
+            } catch(IOException ioe) {
+               System.err.println("Error: couldn't connect.");
+               ioe.printStackTrace();
+            }
+         }
+      });
+
       //Creating the roll button
       jbRoll = new JButton("Roll Dice");
       jbRoll.addActionListener(new ActionListener() {
@@ -100,44 +112,21 @@ public class Client extends JFrame {
          }
       });
       jbRoll.setEnabled(false);
-      jpNorth.add(jtfAlias);
-      jpNorth.add(jtfIP);
-      jpNorth.add(jbRoll);
-      jpNorth.add(jbConnect);
-      jpNorth.add(jbDisconnect);
-      add(jpNorth, BorderLayout.NORTH);
       
-      //WEST Panel: Incoming Text and Send Message
+      //WEST Panel: Display Incoming Messages and Send Messages
       JPanel jpWest = new JPanel(new BorderLayout(5, 5));
-      //Creating the JTextArea for displaying messages, including a border
+      //Create the JTextArea for displaying messages. Include a border and enable word wrapping
       jtaDisplayMsgs = new JTextArea(0, 15);
       jtaDisplayMsgs.setLineWrap(true);
       jtaDisplayMsgs.setWrapStyleWord(true);
-      jtaDisplayMsgs.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder())); 
-      //Creating the JScrollPanel to house the JTextArea for messages
-      JScrollPane jspScroll = new JScrollPane(jtaDisplayMsgs);
-      jspScroll.createVerticalScrollBar();
-      jspScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+      jtaDisplayMsgs.setBorder(BorderFactory.createCompoundBorder
+                              (BorderFactory.createRaisedBevelBorder(), 
+                               BorderFactory.createLoweredBevelBorder())); 
+      //Create the JScrollPanel to house the JTextArea for messages
+      JScrollPane jspScroll = new JScrollPane(jtaDisplayMsgs, 
+                                              ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, 
+                                              ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
       jtaDisplayMsgs.setEnabled(false);
-      
-      //EAST Panel: Incoming Game Message from Server
-      JPanel jpEast = new JPanel(new BorderLayout(5,5));
-      //Creating the JTextArea for displaying Game Message, including a border
-      JLabel jlPlayerMoves = new JLabel("Player Moves");
-      jlPlayerMoves.setHorizontalAlignment(JLabel.CENTER);
-      jlPlayerMoves.setBackground(new Color(255,155,255));
-      jlPlayerMoves.setOpaque(true);
-      jlPlayerMoves.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder())); 
-      jtaDisplayGM = new JTextArea(0, 15);
-      jtaDisplayGM.setLineWrap(true);
-      jtaDisplayGM.setWrapStyleWord(true);
-      jtaDisplayGM.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createRaisedBevelBorder(), BorderFactory.createLoweredBevelBorder())); 
-      //Creating the JScrollPanel to house the JTextArea for Game Messages
-      JScrollPane jspScrollGM = new JScrollPane(jtaDisplayGM);
-      jspScrollGM.createVerticalScrollBar();
-      jspScrollGM.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-      jtaDisplayGM.setEnabled(false);
-      
       //Creating the JTextField for sending messages
       JTextField jtfSendMsgs = new JTextField(15);
       //Binding the Enter key to sendMessage
@@ -150,16 +139,46 @@ public class Client extends JFrame {
          }
       });
       
+      //EAST Panel: Incoming game messages from Server
+      JPanel jpEast = new JPanel(new BorderLayout(5,5));
+      //Create a JLabel to differentiate game messages from chat messages
+      JLabel jlPlayerMoves = new JLabel("Player Moves");
+      jlPlayerMoves.setHorizontalAlignment(JLabel.CENTER);
+      jlPlayerMoves.setBackground(new Color(255,155,255));
+      jlPlayerMoves.setOpaque(true);
+      jlPlayerMoves.setBorder(BorderFactory.createCompoundBorder
+                             (BorderFactory.createRaisedBevelBorder(), 
+                              BorderFactory.createLoweredBevelBorder())); 
+      //Create the JTextArea for displaying game messages. Include a border and enable word wrapping.
+      jtaDisplayGM = new JTextArea(0, 15);
+      jtaDisplayGM.setLineWrap(true);
+      jtaDisplayGM.setWrapStyleWord(true);
+      jtaDisplayGM.setBorder(BorderFactory.createCompoundBorder
+                            (BorderFactory.createRaisedBevelBorder(), 
+                             BorderFactory.createLoweredBevelBorder())); 
+      //Create the JScrollPanel to house the JTextArea for game messages
+      JScrollPane jspScrollGM = new JScrollPane(jtaDisplayGM, 
+                                                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, 
+                                                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+      
+      //Add components to the North, West, and East panels
+      jpNorth.add(jtfAlias);
+      jpNorth.add(jtfIP);
+      jpNorth.add(jbRoll);
+      jpNorth.add(jbConnect);
+      jpNorth.add(jbDisconnect);
       jpWest.add(jspScroll, BorderLayout.CENTER);
       jpWest.add(jtfSendMsgs, BorderLayout.SOUTH);
       jpEast.add(jlPlayerMoves, BorderLayout.NORTH);
       jpEast.add(jspScrollGM, BorderLayout.CENTER);
-      //Adding padding to make the West area look nicer
+      //Add padding to make West and East regions prettier
       jpWest.setBorder(new EmptyBorder(0, 10, 5, 10));
       jpEast.setBorder(new EmptyBorder(0, 10, 30, 10));
+      //Adding the North, West, and East panels to the JFrame
+      add(jpNorth, BorderLayout.NORTH);
       add(jpWest, BorderLayout.WEST);
       add(jpEast,BorderLayout.EAST);
-      //JFrame Initialization
+      //Initialize the JFrame
       setSize(864,486);
       setDefaultCloseOperation(EXIT_ON_CLOSE);
       setVisible(true);
@@ -222,25 +241,21 @@ public class Client extends JFrame {
                ioe.printStackTrace();
             }
             switch(dw.getType()){
-               //Handle messages
+               //Handle incoming messages, treating chat messages and game messages differently
                case DataWrapper.STRINGCODE:
-                  
                   String incomingMsg = dw.getMessage();
-                  
+                  //If boolean isGameMessage is true, display the message in the game messages area.
                   if(dw.isGameMessage) {
                      gmLog.append(incomingMsg + "\n");
                      jtaDisplayGM.setText(gmLog.toString());
-                     //this is a GameMessage  
-                     //Display on gameMessage window aka new JTextArea in new JScrollPane
+                  //Else, display the message in the chat messages area.
                   } else {
-                     //this is a ChatMessage
-                     
                      chatLog.append(incomingMsg + "\n");
                      jtaDisplayMsgs.setText(chatLog.toString());
                   }
-                  //System.out.println(dw.getMessage());
                   break;
-               //Handle ControlToken objects
+                  
+               //Handle incoming ControlToken objects
                case DataWrapper.CTCODE:
                   ControlToken ct = dw.getCT();
                   if(ct.getCode() == 1){
@@ -250,9 +265,11 @@ public class Client extends JFrame {
                   }
                   break;
                   
+               //Default case
                default:
                   System.err.println("Error: invalid DataWrapper.type");
-            }
+                  
+            } //end of switch statement
          } //end of while loop
       }  //end of run method
    } //end of ObjectListener class
@@ -267,6 +284,7 @@ public class Client extends JFrame {
       private String initialString;
       private boolean initGet = false;
       private String jtcName;
+      
       /**
        * Sets the JComponent's text to the initial String
        * if the field is empty to show information about the field.
@@ -299,7 +317,7 @@ public class Client extends JFrame {
          if(jtc.getText().equals(initialString)){
             jtc.setText("");
          }
-        
       }
-   }
-}
+      
+   } //end of FocListener class
+} //end of Client class

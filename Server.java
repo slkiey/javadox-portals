@@ -149,11 +149,11 @@ public class Server extends JFrame{
          try{
             ois = new ObjectInputStream(mySocket.getInputStream());
             oos = new ObjectOutputStream(mySocket.getOutputStream());
-            //Listen for RollRequest objects.
+            //Listen for messages and RollRequest objects.
             while(true){
                DataWrapper dw = (DataWrapper) ois.readObject();
+               //Get the name from the InputStream if not retrieved already
                if(!nameGet){
-                  //Get the name from the InputStream if not retrieved already
                   String line = "";
                   if(dw.getType() == DataWrapper.STRINGCODE){
                      line = dw.getMessage();
@@ -177,30 +177,30 @@ public class Server extends JFrame{
                   this.setName(alias);
                   System.out.println("Thread alias: " + alias);
                   nameGet = true;
-               } else {
-                  switch(dw.getType()){
-                     //Handle messages
-                     case DataWrapper.STRINGCODE:
-                     
-                     
-                        //Send client messages to all clients, appending sender name
-                        String fmtMessage = String.format("%s: %s", this.getName(), dw.getMessage());
-                        sendToAll(fmtMessage);
-                        System.out.println(fmtMessage);
-                        break;
-                     //Handle RollRequest objects
-                     case DataWrapper.RRCODE:
-                        srr = dw.getRR();
-                        String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rollResult());
-                        //Obtain the roll result and send it to all clients.
-                        sendGMToAll(fmtRR);
-                        System.out.println(fmtRR);
-                        break;
-                     default:
-                        System.err.println("Error: invalid DataWrapper.type");
-                  }
                }
-               
+               switch(dw.getType()){
+                  //Handle messages
+                  case DataWrapper.STRINGCODE:
+                     //Send client messages to all clients, appending sender name
+                     String fmtMessage = String.format("%s: %s", this.getName(), dw.getMessage());
+                     sendToAll(fmtMessage);
+                     System.out.println(fmtMessage);
+                     break;
+                     
+                  //Handle RollRequest objects
+                  case DataWrapper.RRCODE:
+                     srr = dw.getRR();
+                     String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rollResult());
+                     //Obtain the roll result and send it to all clients.
+                     sendGMToAll(fmtRR);
+                     System.out.println(fmtRR);
+                     break;
+                     
+                  //Default case
+                  default:
+                     System.err.println("Error: invalid DataWrapper.type");
+                     
+               } //end of switch statement
             } //end of while loop
          } catch(ClassNotFoundException cnfe) {
             System.err.println("Error: class not found " + cnfe.getMessage());
@@ -348,6 +348,7 @@ public class Server extends JFrame{
                   System.out.printf("Could not kick client %s, client %s not connected.", name, name);
                }
             }
+            
          } //end of while loop
       } //end of run method
    } //end of ConsoleHandler class
