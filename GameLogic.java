@@ -103,7 +103,7 @@ public class GameLogic extends JFrame {
 
     /**
      * Adds a player's JLabel to the specified JPanel position.
-     * Sleeps a number of milliseconds before moving.
+     * Informs the player if they won or overshot the last tile.
      * @param jlPlayer a player's JLabel
      * @param rows the row position, from top to bottom
      * @param columns the column position, from left to right
@@ -281,6 +281,11 @@ public class GameLogic extends JFrame {
             addToBoard(this, rowsTo, columnsTo);
         }
 
+        /**
+         * Moves a single tile x number of times.
+         * Calls the move() method.
+         * @param positions the number of tiles to move
+         */
         public void moveOneByOne(int positions) {
             ActionListener alMv1 = new ActionListener() {
                 int counter = positions;
@@ -308,7 +313,10 @@ public class GameLogic extends JFrame {
          * Returns the content of the JLabel.
          * @return the content of the JLabel
          */
-        public String getContent() { return getText(); }
+        public String getContent(){
+            return getText();
+        }
+
     }
 
     protected class PlayerPanel extends JPanel{
@@ -317,7 +325,7 @@ public class GameLogic extends JFrame {
         private JButton jbMove1b1;
 
         /**
-         * Creates a control panel for a newly created player.
+         * Constructs a control panel for a newly created player.
          * @param p the player the panel will control
          */
         public PlayerPanel(Player p){
