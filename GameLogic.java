@@ -1,7 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
-
+import java.util.ArrayList;
 /**
  * A class implementing the game logic we will use
  * in our Portals game.
@@ -12,7 +12,7 @@ public class GameLogic extends JFrame {
     private JPanel[][] board;
     private final int BOARD_SIZE;
     private JPanel jpBoard;
-
+    private ArrayList<PlayerPanel> alPlayerPanels = new ArrayList<PlayerPanel>();
     /**
      * Construct the GUI and make a board with the specified arguments.
      * @param args the size of the board
@@ -62,7 +62,9 @@ public class GameLogic extends JFrame {
                 //Add the player to the bottom right tile
                 addToBoard(pCreated, BOARD_SIZE - 1, BOARD_SIZE - 1);
                 //Create a new JPanel to control this player
-                jpCreatedPlayers.add(makePlayerPanel(pCreated));
+                PlayerPanel jpPlayer = new PlayerPanel(pCreated);
+                alPlayerPanels.add(jpPlayer);
+                jpCreatedPlayers.add(jpPlayer);
             }
         });
         jpCreate.add(jtfName); jpCreate.add(jtfDisplayName); jpCreate.add(jbCreate);
@@ -100,48 +102,6 @@ public class GameLogic extends JFrame {
     }
 
     /**
-     * Creates a control panel for a newly created player.
-     * @param p the player the panel will control
-     * @return a JPanel with controls for the player
-     */
-    public JPanel makePlayerPanel(Player p){
-        JPanel jpPlayer = new JPanel();
-        JButton jbMove = new JButton("Move");
-        JTextField jtfNumMoves = new JTextField("# moves");
-        //Configuring the JPanel
-        Dimension pref = new Dimension(300, 100);
-        jpPlayer.setPreferredSize(pref);
-        jpPlayer.setMaximumSize(pref);
-        jpPlayer.setMinimumSize(pref);
-        jpPlayer.setBorder(BorderFactory.createLineBorder(Color.BLUE, 1));
-        //Adding components
-        jpPlayer.add(new JLabel("Name: " + p.getName()));
-        jpPlayer.add(new JLabel("Display name: " + p.getContent()));
-        jpPlayer.add(jtfNumMoves);
-        //Creating a button to move
-        jbMove.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                try {
-                    if(Integer.parseInt(jtfNumMoves.getText()) < 0){
-                        JOptionPane.showMessageDialog(jbMove, "Negative numbers are not supported.",
-                                "ERROR: Invalid Number", JOptionPane.ERROR_MESSAGE);
-                    } else {
-                        System.out.printf("Player %s is moving %d tiles..%n",
-                                p.getContent(), Integer.parseInt(jtfNumMoves.getText()));
-                        p.move(Integer.parseInt(jtfNumMoves.getText()));
-                    }
-                } catch(NumberFormatException nfe) {
-                    JOptionPane.showMessageDialog(jbMove, "Please enter a valid number.",
-                            "ERROR: Invalid Number", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-        jpPlayer.add(jbMove);
-        return jpPlayer;
-    }
-
-    /**
      * Adds a player's JLabel to the specified JPanel position.
      * Sleeps a number of milliseconds before moving.
      * @param jlPlayer a player's JLabel
@@ -149,8 +109,19 @@ public class GameLogic extends JFrame {
      * @param columns the column position, from left to right
      */
     public void addToBoard(JLabel jlPlayer, int rows, int columns){
-        caughtSleep(750);
-        board[rows][columns].add(jlPlayer);
+        try {
+            board[rows][columns].add(jlPlayer);
+            if(rows == 0 && columns == 0){
+                JOptionPane.showMessageDialog(null, "You won!");
+                for(PlayerPanel pp: alPlayerPanels){
+                    if(pp.player.getContent().equals(jlPlayer.getText())){
+                        pp.disableButtons();
+                    }
+                }
+            }
+        } catch(ArrayIndexOutOfBoundsException aioobe) {
+            JOptionPane.showMessageDialog(null, "You failed to land exactly on the last tile.");
+        }
     }
 
     /**
@@ -168,7 +139,7 @@ public class GameLogic extends JFrame {
 
     protected class Player extends JLabel {
         private final String NAME;
-
+        private boolean winState = false;
         /**
          * Constructs a Player with a name and desired JLabel content.
          * @param name the player's name
@@ -310,6 +281,21 @@ public class GameLogic extends JFrame {
             addToBoard(this, rowsTo, columnsTo);
         }
 
+        public void moveOneByOne(int positions) {
+            ActionListener alMv1 = new ActionListener() {
+                int counter = positions;
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    if(counter != 0) {
+                        move(1);
+                        counter--;
+                    }
+                }
+            };
+            Timer timer = new Timer(500, alMv1);
+            timer.start();
+        }
+
         /**
          * Returns the player's name.
          * @return the player's name
@@ -323,6 +309,82 @@ public class GameLogic extends JFrame {
          * @return the content of the JLabel
          */
         public String getContent() { return getText(); }
+    }
+
+    protected class PlayerPanel extends JPanel{
+        private Player player;
+        private JButton jbMove;
+        private JButton jbMove1b1;
+
+        /**
+         * Creates a control panel for a newly created player.
+         * @param p the player the panel will control
+         */
+        public PlayerPanel(Player p){
+            player = p;
+            jbMove = new JButton("Move");
+            jbMove1b1 = new JButton("Move 1b1");
+            JTextField jtfNumMoves = new JTextField("# moves");
+            //Configuring the JPanel
+            Dimension pref = new Dimension(300, 100);
+            setPreferredSize(pref);
+            setMaximumSize(pref);
+            setMinimumSize(pref);
+            setBorder(BorderFactory.createLineBorder(Color.BLUE, 1));
+            //Adding components
+            add(new JLabel("Name: " + p.getName()));
+            add(new JLabel("Display name: " + p.getContent()));
+            add(jtfNumMoves);
+            //Creating a button to move
+            jbMove.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    try {
+                        if(Integer.parseInt(jtfNumMoves.getText()) < 0){
+                            JOptionPane.showMessageDialog(jbMove, "Negative numbers are not supported.",
+                                    "ERROR: Invalid Number", JOptionPane.ERROR_MESSAGE);
+                        } else {
+                            System.out.printf("Player %s is moving %d tiles..%n",
+                                    p.getContent(), Integer.parseInt(jtfNumMoves.getText()));
+                            p.move(Integer.parseInt(jtfNumMoves.getText()));
+                        }
+                    } catch(NumberFormatException nfe) {
+                        JOptionPane.showMessageDialog(jbMove, "Please enter a valid number.",
+                                "ERROR: Invalid Number", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            });
+            //Creating a button to move one tile at a time
+            jbMove1b1.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    try {
+                        if(Integer.parseInt(jtfNumMoves.getText()) < 0){
+                            JOptionPane.showMessageDialog(jbMove1b1, "Negative numbers are not supported.",
+                                    "ERROR: Invalid Number", JOptionPane.ERROR_MESSAGE);
+                        } else {
+                            System.out.printf("Player %s is moving %d tiles..%n",
+                                    p.getContent(), Integer.parseInt(jtfNumMoves.getText()));
+                            p.moveOneByOne(Integer.parseInt(jtfNumMoves.getText()));
+                        }
+                    } catch(NumberFormatException nfe) {
+                        JOptionPane.showMessageDialog(jbMove1b1, "Please enter a valid number.",
+                                "ERROR: Invalid Number", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            });
+            add(jbMove); add(jbMove1b1);
+        }
+
+        /**
+         * Disables jbMove and jbMove1b1.
+         * In our client-server program, we can call disableClient() for the player.
+         */
+        public void disableButtons(){
+            jbMove.setEnabled(false);
+            jbMove1b1.setEnabled(false);
+        }
+
     }
 }
 
