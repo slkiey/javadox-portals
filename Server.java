@@ -1,23 +1,25 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.swing.*;
 
 public class Server extends JFrame{
-   private ServerSocket ss;
-   private Vector<Socket> clients = new Vector<Socket>();
-   private Vector<ClientHandler> clientThreads = new Vector<ClientHandler>();
-   private final int PORT = 4242;
+   private Vector<ClientHandler> clientThreads = new Vector<>();
+   private static final int PORT = 4242;
+   private final Random rand;
    /**
     * The server's default constructor.
     * Accepts client connections.
     */
    public Server(){
-      
+      //Create a Random object
+      rand = new Random();
       //Accept and handle client connections
       try{
-         Socket cs = null;
-         ss = new ServerSocket(PORT);
+         Socket cs;
+         ServerSocket ss = new ServerSocket(PORT);
          //Print server information
          InetAddress ina = InetAddress.getLocalHost();
          System.out.println("Host name: " + ina.getHostName());
@@ -25,7 +27,6 @@ public class Server extends JFrame{
          new ConsoleHandler().start();
          while(true){
             cs = ss.accept();
-            clients.add(cs);
             ClientHandler ct = new ClientHandler(cs);
             ct.start();
             clientThreads.add(ct);
@@ -54,14 +55,31 @@ public class Server extends JFrame{
             //Get the client's ObjectOutputStream
             ObjectOutputStream oos = ch.getOOS();
             //Print the message to the client
-            oos.writeObject(new DataWrapper(0, msg, false));
+            oos.writeObject(new DataWrapper(DataWrapper.STRINGCODE, msg, false));
          } catch(IOException ioe) {
             System.out.println("IOException occurred: " + ioe.getMessage());
             ioe.printStackTrace();
          }
       }
    } //end of sendToAll method
-   
+
+   /**
+    * Sends a ControlToken to all ClientHandlers.
+    * @param ct the ControlToken to be sent
+    */
+   private void sendCTToAll(ControlToken ct) {
+      for(ClientHandler ch: clientThreads){
+         try{
+            //Get the client's ObjectOutputStream
+            ObjectOutputStream oos = ch.getOOS();
+            //Write the ControlToken to the client
+            oos.writeObject(new DataWrapper(DataWrapper.CTCODE, ct));
+         } catch(IOException ioe) {
+            System.out.println("IOException occurred: " + ioe.getMessage());
+            ioe.printStackTrace();
+         }
+      }
+   }
   /**
     * Prints a GameMessage string to all clients in the clientThreads vector.
     * @param msg the message to be sent
@@ -107,24 +125,7 @@ public class Server extends JFrame{
       }
       return -1;
    }
-   
-   /** 
-    * Extracts a name from a String array, removing the first element.
-    * Method written for processing names from console.
-    * @param stringArray the String array
-    * @return String the extracted name
-    */
-   public String getNameFromStringArray(String[] stringArray){
-      String[] sa = stringArray;
-      String name = "";
-      sa[0] = "";
-      for(String s: sa){
-         name += s + " ";
-      }
-      name = name.trim();
-      return name;
-   }
-   
+
    //A thread class to handle clients.
    protected class ClientHandler extends Thread {
       private ObjectInputStream ois;
@@ -158,25 +159,32 @@ public class Server extends JFrame{
                   if(dw.getType() == DataWrapper.STRINGCODE){
                      line = dw.getMessage();
                   }
-                  sendToAll(line);
                   System.out.println(line);
                   /* Following code extracts the name from the "CLIENT connected"
                    * String. Works by splitting the String into an array and removing
                    * the last element.
                    */
                   String[] aliasArray = line.split("\\s+");
-                  String alias = "";
+                  StringBuilder alias = new StringBuilder();
                   for(int i = 0; i < aliasArray.length - 1; i++){
                      //Do not append a space if at the second to last element
                      if( i == (aliasArray.length - 2)){
-                        alias += aliasArray[i];
+                        alias.append(aliasArray[i]);
                      } else {
-                        alias += aliasArray[i] + " ";
+                        alias.append(aliasArray[i]).append(" ");
                      }
                   }
-                  this.setName(alias);
-                  System.out.println("Thread alias: " + alias);
+                  //Disconnect the client if the name is already in use
+                  if(getIndex(alias.toString()) != -1){
+                     oos.writeObject(
+                             new DataWrapper(
+                                     DataWrapper.STRINGCODE, "Sorry, that name is in use. Disconnecting..", false));
+                     mySocket.close();
+                  }
+                  this.setName(alias.toString());
                   nameGet = true;
+                  //Tell all clients to add the new client to the board
+                  sendCTToAll(new ControlToken(ControlToken.ADDCODE, alias.toString()));
                }
                switch(dw.getType()){
                   //Handle messages
@@ -190,9 +198,13 @@ public class Server extends JFrame{
                   //Handle RollRequest objects
                   case DataWrapper.RRCODE:
                      srr = dw.getRR();
-                     String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rollResult());
                      //Obtain the roll result and send it to all clients.
+                     int rolledResult = rollResult();
+                     String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rolledResult);
                      sendGMToAll(fmtRR);
+                     //Move the player on all the boards by writing a ControlToken with the rolledResult
+                     sendCTToAll(new ControlToken(
+                             ControlToken.MOVECODE, this.getName(), rolledResult, true));
                      System.out.println(fmtRR);
                      break;
                      
@@ -205,11 +217,17 @@ public class Server extends JFrame{
          } catch(ClassNotFoundException cnfe) {
             System.err.println("Error: class not found " + cnfe.getMessage());
          } catch(SocketException se) {
+            //In the case of a disconnection, remove them from the ClientHandler Vector and send a ControlToken
+            //to all remaining clients telling them to remove the player.
             System.err.println(this.getName() + " disconnected.");
             clientThreads.remove(getIndex(this.getName()));
+            sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
          } catch(EOFException eofe) {
+            //In the case of a disconnection, remove them from the ClientHandler Vector and send a ControlToken
+            //to all remaining clients telling them to remove the player.
             System.err.println(this.getName() + " disconnected.");
             clientThreads.remove(getIndex(this.getName()));
+            sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
          } catch(IOException ioe) {
             ioe.printStackTrace();
          }
@@ -220,7 +238,6 @@ public class Server extends JFrame{
        * @return a random number from 1 to 6.
        */
       public int rollResult(){
-         Random rand = new Random();
          return rand.nextInt(6) + 1;
       }
       
@@ -230,7 +247,7 @@ public class Server extends JFrame{
        */
       public void enableClient(){
          try{
-            oos.writeObject(new DataWrapper(2, new ControlToken(1)));
+            oos.writeObject(new DataWrapper(DataWrapper.CTCODE, new ControlToken(ControlToken.ENABLECODE)));
             oos.flush();
          } catch(IOException ioe) {
             ioe.printStackTrace();
@@ -243,7 +260,7 @@ public class Server extends JFrame{
        */
       public void disableClient(){
          try{
-            oos.writeObject(new DataWrapper(2, new ControlToken(0)));
+            oos.writeObject(new DataWrapper(DataWrapper.CTCODE, new ControlToken(ControlToken.DISABLECODE)));
             oos.flush();
          } catch(IOException ioe) {
             ioe.printStackTrace();
@@ -280,11 +297,24 @@ public class Server extends JFrame{
          System.out.println("Console started");
          while(true){
             String consoleLine = scan.nextLine();
-            String[] cmdSplit = consoleLine.split("\\s+");
-            //Store the first element in a String command
-            String command = cmdSplit[0];
-            String name = getNameFromStringArray(cmdSplit);
+            if(consoleLine.trim().equals("")) {
+               System.err.println("Blank line");
+               continue;
+            }
+            ArrayList<String> cmdSplit = new ArrayList<>();
+
+            //Split the line by spaces except between quotes and add to the cmdSplit arraylist
+            Matcher matcher = Pattern.compile("([^\"]\\S*|\".+?\")\\s*").matcher(consoleLine);
+            while(matcher.find()) cmdSplit.add(matcher.group(1).replace("\"", ""));
+
+            //Store the first element in a String command and the second element in a String name
+            String command = cmdSplit.get(0);
+            String name = "";
             System.out.println("Command: " + command);
+            if(cmdSplit.size() > 1) {
+               name = cmdSplit.get(1);
+               System.out.println("Name: " + name);
+            }
             /* COMMANDS BELOW
              * printnames: Prints the current list of clients
              *
@@ -297,6 +327,9 @@ public class Server extends JFrame{
              * them to disable their button.
              *
              * kick name: Close the socket for this player.
+             *
+             * move name <int> <obo>: Move the player a number of spaces. Include obo if you want the
+             * player to move one tile at a time.
              */
             
             //Prints the current list of clients
@@ -320,7 +353,7 @@ public class Server extends JFrame{
                   System.out.printf("Attempting to enable %s's button...\n", name);
                   clientThreads.get(getIndex(name)).enableClient();
                } else {
-                  System.out.printf("Could not enable button, client %s not found.\n", name);
+                  System.err.printf("Could not enable button, client %s not found.\n", name);
                }
             }
             
@@ -330,7 +363,7 @@ public class Server extends JFrame{
                   System.out.printf("Attempting to disable %s's button...\n", name);
                   clientThreads.get(getIndex(name)).disableClient();
                } else {
-                  System.out.printf("Could not disable button, client %s not found.\n", name);
+                  System.err.printf("Could not disable button, client %s not found.\n", name);
                }
             }
             
@@ -345,10 +378,32 @@ public class Server extends JFrame{
                      ioe.printStackTrace();
                   }
                } else {
-                  System.out.printf("Could not kick client %s, client %s not connected.", name, name);
+                  System.err.printf("Could not kick client %s, client %s not connected.\n", name, name);
                }
             }
-            
+
+            //Move a player a number of tiles on all boards
+            if(command.equals("move")) {
+               if(getIndex(name) != -1) {
+                  try {
+                     int tilesToMove = Integer.parseInt(cmdSplit.get(2));
+                     boolean oBo = false;
+                     if(cmdSplit.size() >= 4) {
+                        String oneByOne = cmdSplit.get(3);
+                        if (oneByOne.equals("obo")) {
+                           oBo = true;
+                        }
+                     }
+                     sendCTToAll(new ControlToken(
+                             ControlToken.MOVECODE, name, tilesToMove, oBo));
+                  } catch (NumberFormatException nfe) {
+                     System.err.println("Invalid number of moves, please enter an integer.");
+                  }
+               } else {
+                  System.err.printf("Could not move client %s, client %s not connected.\n", name, name);
+               }
+            }
+
          } //end of while loop
       } //end of run method
    } //end of ConsoleHandler class

@@ -2,7 +2,6 @@ import java.io.*;
 import java.net.*;
 import java.awt.event.*;
 import java.awt.BorderLayout;
-import java.awt.GridLayout;
 import java.awt.Color;
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
@@ -22,13 +21,14 @@ public class Client extends JFrame {
    private JButton jbRoll;
    private StringBuilder chatLog = new StringBuilder();
    private StringBuilder gmLog = new StringBuilder();
+   private GameLogic glClient;
    
    /**
     * Default constructor for the Client class.
     * Handles GUI.
     */
    public Client(){
-      
+
       //NORTH Panel: Alias, Roll Dice, IP, Connect, Disconnect
       JPanel jpNorth = new JPanel();
       //Creating the alias text field
@@ -39,24 +39,34 @@ public class Client extends JFrame {
       JTextField jtfIP = new JTextField("Enter IP Address", 10);
       jtfIP.setToolTipText("Enter IP Address here");
       jtfIP.addFocusListener(new FocListener());
-      //Creating the disconnect button
+      //Creating the disconnect and connect buttons
       JButton jbDisconnect = new JButton("Disconnect");
+      jbDisconnect.setEnabled(false);
+      JButton jbConnect = new JButton("Connect");
+      //Adding action listeners to the disconnect + connect buttons
       jbDisconnect.addActionListener(new ActionListener() {
+         /**
+          * Attempts to close the connection and clear the board.
+          * Re-enables the connect button after successfully disconnecting.
+          * @param ae the ActionEvent trigger
+          */
          public void actionPerformed(ActionEvent ae){
             try{
+               //Clear the board when disconnecting
                System.out.println("Disconnecting..");
+               glClient.clearBoard();
                sock.close();
+               jbConnect.setEnabled(true);
             } catch(IOException ioe) {
                ioe.printStackTrace();
             }
          }
       });
-      jbDisconnect.setEnabled(false);
-      //Creating the connect button
-      JButton jbConnect = new JButton("Connect");
       jbConnect.addActionListener(new ActionListener() {
          /**
           * Attempts to connect to server and instantiates streams.
+          * Disables the connect button and enables the disconnect button.
+          * @param ae the ActionEvent trigger
           */
          public void actionPerformed(ActionEvent ae) {
             try{
@@ -77,6 +87,7 @@ public class Client extends JFrame {
                   sendMessage(alias + " connected.");
                   new ObjectListener().start();
                   jbDisconnect.setEnabled(true);
+                  jbConnect.setEnabled(false);
                }
             } catch(ConnectException ce) {
                System.err.println("Error: couldn't connect.");
@@ -102,12 +113,14 @@ public class Client extends JFrame {
          public void actionPerformed(ActionEvent ae){
             rr = new RollRequest(alias);
             try{
-               oos.writeObject(new DataWrapper(1, rr));
+               oos.writeObject(new DataWrapper(DataWrapper.RRCODE, rr));
             } catch(NullPointerException npe) {
                System.err.println("Error: you are not connected.");
                //npe.printStackTrace();
             } catch(IOException ioe) {
                System.err.println("Error: IOException: " + ioe.getMessage());
+            } finally {
+               //jbRoll.setEnabled(false);
             }
          }
       });
@@ -126,7 +139,7 @@ public class Client extends JFrame {
       JScrollPane jspScroll = new JScrollPane(jtaDisplayMsgs, 
                                               ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, 
                                               ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-      jtaDisplayMsgs.setEnabled(false);
+      jtaDisplayMsgs.setEditable(false);
       //Creating the JTextField for sending messages
       JTextField jtfSendMsgs = new JTextField(15);
       //Binding the Enter key to sendMessage
@@ -155,7 +168,8 @@ public class Client extends JFrame {
       jtaDisplayGM.setWrapStyleWord(true);
       jtaDisplayGM.setBorder(BorderFactory.createCompoundBorder
                             (BorderFactory.createRaisedBevelBorder(), 
-                             BorderFactory.createLoweredBevelBorder())); 
+                             BorderFactory.createLoweredBevelBorder()));
+      jtaDisplayGM.setEditable(false);
       //Create the JScrollPanel to house the JTextArea for game messages
       JScrollPane jspScrollGM = new JScrollPane(jtaDisplayGM, 
                                                 ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, 
@@ -178,8 +192,9 @@ public class Client extends JFrame {
       add(jpNorth, BorderLayout.NORTH);
       add(jpWest, BorderLayout.WEST);
       add(jpEast,BorderLayout.EAST);
+      add(glClient = new GameLogic(5), BorderLayout.CENTER);
       //Initialize the JFrame
-      setSize(864,486);
+      setSize(1000,600);
       setDefaultCloseOperation(EXIT_ON_CLOSE);
       setVisible(true);
       setLocationRelativeTo(null);
@@ -200,7 +215,7 @@ public class Client extends JFrame {
     */
    public void sendMessage(String message){
       try{
-         oos.writeObject(new DataWrapper(0, message, false));
+         oos.writeObject(new DataWrapper(DataWrapper.STRINGCODE, message, false));
       } catch(SocketException se) {
          System.err.println("Error: not connected. Message not sent.");
       } catch(NullPointerException npe) {
@@ -235,6 +250,7 @@ public class Client extends JFrame {
             } catch(EOFException eofe) {
                System.err.println("Error: connection closed. No longer recieving server output.");
                eofe.printStackTrace();
+               break;
             } catch(ClassNotFoundException cnfe) {
                cnfe.printStackTrace();
             } catch(IOException ioe) {
@@ -246,11 +262,11 @@ public class Client extends JFrame {
                   String incomingMsg = dw.getMessage();
                   //If boolean isGameMessage is true, display the message in the game messages area.
                   if(dw.isGameMessage) {
-                     gmLog.append(incomingMsg + "\n");
+                     gmLog.append(incomingMsg).append("\n");
                      jtaDisplayGM.setText(gmLog.toString());
                   //Else, display the message in the chat messages area.
                   } else {
-                     chatLog.append(incomingMsg + "\n");
+                     chatLog.append(incomingMsg).append("\n");
                      jtaDisplayMsgs.setText(chatLog.toString());
                   }
                   break;
@@ -258,16 +274,49 @@ public class Client extends JFrame {
                //Handle incoming ControlToken objects
                case DataWrapper.CTCODE:
                   ControlToken ct = dw.getCT();
-                  if(ct.getCode() == 1){
-                     jbRoll.setEnabled(true);
-                  } else if (ct.getCode() == 0){
-                     jbRoll.setEnabled(false);
+                  switch(ct.getCode()){
+                     case ControlToken.ENABLECODE:
+                        //Enable the roll button
+                        jbRoll.setEnabled(true);
+                        break;
+                     case ControlToken.DISABLECODE:
+                        //Disable the roll button
+                        jbRoll.setEnabled(false);
+                        break;
+                     case ControlToken.ADDCODE:
+                        //Add the player to the starting tile
+                        GameLogic.Player playerLabel = glClient.new Player(ct.getPlayerName());
+                        glClient.addToBoard(playerLabel, glClient.getBoardSize()-1, glClient.getBoardSize()-1);
+                        break;
+                     case ControlToken.MOVECODE:
+                        //Search the players list for the player and move that player the number of spots
+                        for(GameLogic.Player player: glClient.getPlayerArrayList()){
+                           if(player.getContent().equals(ct.getPlayerName())){
+                              if(!ct.getOneByOne())
+                                 player.move(ct.getTilesToMove());
+                              if(ct.getOneByOne())
+                                 player.moveOneByOne(ct.getTilesToMove());
+                           }
+                        }
+                        break;
+                     case ControlToken.REMOVECODE:
+                        //Search the players list for the player and remove them
+                        for(GameLogic.Player player: glClient.getPlayerArrayList()){
+                           if(player.getContent().equals(ct.getPlayerName())){
+                              player.remove();
+                           }
+                        }
+                        break;
+                     default:
+                        System.err.println("Error: invalid ControlToken code.");
+                        break;
                   }
                   break;
                   
                //Default case
                default:
-                  System.err.println("Error: invalid DataWrapper.type");
+                  System.err.println("Error: invalid DataWrapper type.");
+                  break;
                   
             } //end of switch statement
          } //end of while loop
@@ -283,7 +332,6 @@ public class Client extends JFrame {
       private JTextComponent jtc;
       private String initialString;
       private boolean initGet = false;
-      private String jtcName;
       
       /**
        * Sets the JComponent's text to the initial String

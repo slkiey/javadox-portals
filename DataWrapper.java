@@ -1,18 +1,17 @@
+import java.io.*;
+
 /**
  * A wrapper class for messages/tokens to be sent.
  */
-import java.io.*;
-
 public class DataWrapper implements Serializable{
    /*
     * Code for a String: 0
     * Code for a RollRequest: 1
     * Code for a ControlToken: 2
     */
-   static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2, GCODE = 3;
+   protected static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2;
    private int type;
    String message;
-   String gameMessage;
    RollRequest rr;
    ControlToken ct;
    boolean isGameMessage;
@@ -24,7 +23,6 @@ public class DataWrapper implements Serializable{
     * @param message the message to be sent.
     */
    public DataWrapper(int type, String message, boolean _isGameMessage ){
-   
       this.type = type;
       this.message = message;
       this.isGameMessage = _isGameMessage;
