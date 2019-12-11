@@ -8,6 +8,7 @@ import javax.swing.*;
 public class Server extends JFrame{
    private Vector<ClientHandler> clientThreads = new Vector<>();
    private static final int PORT = 4242;
+   private Vector<GameLogic.Player> playerVector = new Vector<>();
    private final Random rand;
    /**
     * The server's default constructor.
@@ -111,7 +112,20 @@ public class Server extends JFrame{
       }
       return String.format("%s is not connected.\n", client);
    }
-   
+
+   /**
+    * Sends a ControlToken.BOARDREQUEST to the first client in the vector,
+    * who presumably has the updated positions.
+    */
+   public void requestBoard(){
+      try {
+         clientThreads.get(0).getOOS().writeObject(
+                 new DataWrapper(DataWrapper.CTCODE, new ControlToken(ControlToken.BOARDREQUEST)));
+      } catch(IOException ioe){
+         ioe.printStackTrace();
+      }
+   }
+
    /**
     * Gets the index of a client in the clientThreads vector from a client's name.
     * @param client the name of the client
@@ -132,7 +146,7 @@ public class Server extends JFrame{
       private ObjectOutputStream oos;
       private Socket mySocket;
       private RollRequest srr;
-      
+
       /**
        * Constructor for the ClientHandler class.
        * @param s the client's socket
@@ -179,12 +193,16 @@ public class Server extends JFrame{
                      oos.writeObject(
                              new DataWrapper(
                                      DataWrapper.STRINGCODE, "Sorry, that name is in use. Disconnecting..", false));
+                     oos.flush();
                      mySocket.close();
                   }
                   this.setName(alias.toString());
                   nameGet = true;
                   //Tell all clients to add the new client to the board
                   sendCTToAll(new ControlToken(ControlToken.ADDCODE, alias.toString()));
+                  //Retrieve an updated board from a player and send it to this client
+                  requestBoard();
+                  oos.writeObject(new DataWrapper(DataWrapper.PLYLISTCODE,playerVector));
                }
                switch(dw.getType()){
                   //Handle messages
@@ -207,7 +225,11 @@ public class Server extends JFrame{
                              ControlToken.MOVECODE, this.getName(), rolledResult, true));
                      System.out.println(fmtRR);
                      break;
-                     
+                  //Store updated incoming Player Vectors in a global variable
+                  case DataWrapper.PLYLISTCODE:
+                     playerVector = dw.getVecPlayers();
+                     System.out.printf("Received a Player Vector of size %d.\n", playerVector.size());
+                     break;
                   //Default case
                   default:
                      System.err.println("Error: invalid DataWrapper.type");
@@ -223,8 +245,6 @@ public class Server extends JFrame{
             clientThreads.remove(getIndex(this.getName()));
             sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
          } catch(EOFException eofe) {
-            //In the case of a disconnection, remove them from the ClientHandler Vector and send a ControlToken
-            //to all remaining clients telling them to remove the player.
             System.err.println(this.getName() + " disconnected.");
             clientThreads.remove(getIndex(this.getName()));
             sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
@@ -232,7 +252,8 @@ public class Server extends JFrame{
             ioe.printStackTrace();
          }
       } //end of run method
-      
+
+
       /**
        * Returns a random number from 1 to 6.
        * @return a random number from 1 to 6.

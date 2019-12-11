@@ -2,6 +2,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.ArrayList;
+import java.util.Vector;
+
 /**
  * A class implementing the game logic we will use
  * in our Portals game.
@@ -12,7 +14,7 @@ public class GameLogic extends JPanel {
     private JPanel[][] board;
     private final int BOARD_SIZE;
     private JPanel jpBoard;
-    private ArrayList<Player> playerArrayList = new ArrayList<>();
+    private Vector<Player> playerVector = new Vector<>();
 
     /**
      * Construct the GUI and make a board with the specified parameters.
@@ -66,6 +68,14 @@ public class GameLogic extends JPanel {
             if (rows == 0 && columns == 0) {
                 JOptionPane.showMessageDialog(null, String.format("%s won!",jlPlayer.getText()) );
             }
+            else if(rows == 3 && columns == 2){
+               JOptionPane.showMessageDialog(null,"Landed on portal!");
+               
+               rows = 4;
+               columns = 4;
+               board[rows][columns].add(jlPlayer);
+               
+            }
         } catch (ArrayIndexOutOfBoundsException aioobe) {
             JOptionPane.showMessageDialog(null, "You failed to land exactly on the last tile.");
         }
@@ -75,7 +85,7 @@ public class GameLogic extends JPanel {
      * Clears the board by calling each player's remove method.
      */
     public void clearBoard() {
-        for(Player player: playerArrayList) {
+        for(Player player: playerVector) {
             player.remove();
         }
     }
@@ -92,8 +102,8 @@ public class GameLogic extends JPanel {
      * Returns the ArrayList of Players.
      * @return the ArrayList of Players
      */
-    public ArrayList<Player> getPlayerArrayList() {
-        return playerArrayList;
+    public Vector<Player> getPlayerVector() {
+        return playerVector;
     }
 
     protected class Player extends JLabel {
@@ -106,7 +116,6 @@ public class GameLogic extends JPanel {
         public Player(String _name) {
             setText(_name);
             name = _name;
-            playerArrayList.add(this);
         }
 
         /**
@@ -226,6 +235,13 @@ public class GameLogic extends JPanel {
                 rowsTo--;
                 columnsTo = (BOARD_SIZE + (columns - positions));
             }
+            
+            //else if(columns == 3 && rows == 2){
+              // rowsTo = 4;
+               //columnsTo = 4;
+            //}
+            
+            //else 
             /*
              * Case 3: If the quantity of moves would not cause any errors and is less than
              * 8.
@@ -235,6 +251,7 @@ public class GameLogic extends JPanel {
 //                System.out.println("entered if 3");
                 columnsTo = columns - moveBank;
             }
+            
             addToBoard(this, rowsTo, columnsTo);
         }
 
@@ -259,6 +276,9 @@ public class GameLogic extends JPanel {
             timer.start();
         }
 
+        public void addToAlPlayers(){
+            playerVector.add(this);
+        }
         /**
          * Returns the player's name.
          * @return the player's name

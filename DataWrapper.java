@@ -1,4 +1,6 @@
 import java.io.*;
+import java.util.ArrayList;
+import java.util.Vector;
 
 /**
  * A wrapper class for messages/tokens to be sent.
@@ -8,14 +10,16 @@ public class DataWrapper implements Serializable{
     * Code for a String: 0
     * Code for a RollRequest: 1
     * Code for a ControlToken: 2
+    * Code for Player list
     */
-   protected static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2;
+   protected static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2, PLYLISTCODE = 3;
    private int type;
    String message;
    RollRequest rr;
    ControlToken ct;
    boolean isGameMessage;
-   
+   Vector<GameLogic.Player> vecPlayers;
+
    /** 
     * A constructor for the DataWrapper class.
     * Accepts a message.
@@ -49,8 +53,13 @@ public class DataWrapper implements Serializable{
       this.type = type;
       this.ct = ct;
    }
-   
-   
+
+
+   public DataWrapper(int type, Vector<GameLogic.Player> _vecPlayers){
+      this.type = type;
+      vecPlayers = _vecPlayers;
+   }
+
    /**
     * Returns a code representing the Object type.
     * @return type code representing the Object type.
@@ -82,6 +91,9 @@ public class DataWrapper implements Serializable{
    public ControlToken getCT(){
       return ct;
    }
-   
+
+   public Vector<GameLogic.Player> getVecPlayers(){
+      return vecPlayers;
+   }
    
 }

@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.util.*;
 import java.awt.event.*;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -56,6 +57,7 @@ public class Client extends JFrame {
                System.out.println("Disconnecting..");
                glClient.clearBoard();
                sock.close();
+               jbDisconnect.setEnabled(false);
                jbConnect.setEnabled(true);
             } catch(IOException ioe) {
                ioe.printStackTrace();
@@ -194,7 +196,9 @@ public class Client extends JFrame {
       add(jpEast,BorderLayout.EAST);
       add(glClient = new GameLogic(5), BorderLayout.CENTER);
       //Initialize the JFrame
-      setSize(1000,600);
+//      pack();
+      setSize(1066, 800);
+      setResizable(false);
       setDefaultCloseOperation(EXIT_ON_CLOSE);
       setVisible(true);
       setLocationRelativeTo(null);
@@ -224,7 +228,11 @@ public class Client extends JFrame {
          ioe.printStackTrace();
       }
    }
-   
+
+   public GameLogic getGlClient(){
+      return glClient;
+   }
+
    //Listens for incoming messages/objects
    protected class ObjectListener extends Thread{
       
@@ -270,7 +278,18 @@ public class Client extends JFrame {
                      jtaDisplayMsgs.setText(chatLog.toString());
                   }
                   break;
-                  
+               //Handle incoming player ArrayLists
+               case DataWrapper.PLYLISTCODE:
+                  //Unpack the player ArrayList (add to board) once received
+                  try {
+                     System.out.printf("Unpacking the vector..\nSize: %d\n", dw.getVecPlayers().size());
+                     for(GameLogic.Player p: dw.getVecPlayers()){
+                        glClient.addToBoard(p, p.returnIntPos()[0], p.returnIntPos()[1]);
+                     }
+                  } catch(NullPointerException npe) {
+                     npe.printStackTrace();
+                  }
+                  break;
                //Handle incoming ControlToken objects
                case DataWrapper.CTCODE:
                   ControlToken ct = dw.getCT();
@@ -287,10 +306,11 @@ public class Client extends JFrame {
                         //Add the player to the starting tile
                         GameLogic.Player playerLabel = glClient.new Player(ct.getPlayerName());
                         glClient.addToBoard(playerLabel, glClient.getBoardSize()-1, glClient.getBoardSize()-1);
+                        playerLabel.addToAlPlayers();
                         break;
                      case ControlToken.MOVECODE:
                         //Search the players list for the player and move that player the number of spots
-                        for(GameLogic.Player player: glClient.getPlayerArrayList()){
+                        for(GameLogic.Player player: glClient.getPlayerVector()){
                            if(player.getContent().equals(ct.getPlayerName())){
                               if(!ct.getOneByOne())
                                  player.move(ct.getTilesToMove());
@@ -301,10 +321,20 @@ public class Client extends JFrame {
                         break;
                      case ControlToken.REMOVECODE:
                         //Search the players list for the player and remove them
-                        for(GameLogic.Player player: glClient.getPlayerArrayList()){
+                        for(GameLogic.Player player: glClient.getPlayerVector()){
                            if(player.getContent().equals(ct.getPlayerName())){
                               player.remove();
                            }
+                        }
+                        break;
+                     case ControlToken.BOARDREQUEST:
+                        //Send the players list to the Server
+                        try {
+                           System.out.printf("Board request received. Sending a playerVector of %d players.\n", glClient.getPlayerVector().size());
+                           oos.writeObject(new DataWrapper(DataWrapper.PLYLISTCODE, glClient.getPlayerVector()));
+                           oos.flush();
+                        } catch (IOException e) {
+                           e.printStackTrace();
                         }
                         break;
                      default:
@@ -312,7 +342,7 @@ public class Client extends JFrame {
                         break;
                   }
                   break;
-                  
+
                //Default case
                default:
                   System.err.println("Error: invalid DataWrapper type.");

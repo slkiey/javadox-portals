@@ -11,7 +11,7 @@ public class ControlToken implements Serializable{
     * Code to move a player: 3
     * Code to remove a player: 4
     */
-   protected static final int ENABLECODE = 0, DISABLECODE = 1, ADDCODE = 2, MOVECODE = 3, REMOVECODE = 4;
+   protected static final int ENABLECODE = 0, DISABLECODE = 1, ADDCODE = 2, MOVECODE = 3, REMOVECODE = 4, BOARDREQUEST = 5;
    private int opcode;
    private String playerName;
    private int tilesToMove;
