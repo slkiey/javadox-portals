@@ -346,7 +346,8 @@ public class Client extends JFrame {
                      case ControlToken.ADDCODE:
                         if(!glClient.containsPlayer(ct.getPlayerName())) {
                            GameLogic.Player playerLabel = glClient.new Player(ct.getPlayerName());
-                           glClient.addToBoard(playerLabel, glClient.getBoardSize() - 1, glClient.getBoardSize() - 1);
+                           glClient.addToBoard(
+                                   playerLabel, glClient.getBoardSize() - 1, glClient.getBoardSize() - 1, alias);
                            playerLabel.addToPlayersVector();
                         }
                         break;
@@ -356,9 +357,9 @@ public class Client extends JFrame {
                         for(GameLogic.Player player: glClient.getPlayerVector()){
                            if(player.getContent().equals(ct.getPlayerName())){
                               if(!ct.getOneByOne())
-                                 player.move(ct.getTilesToMove(), false);
+                                 player.move(ct.getTilesToMove(), false, alias);
                               if(ct.getOneByOne())
-                                 player.moveOneByOne(ct.getTilesToMove());
+                                 player.moveOneByOne(ct.getTilesToMove(), alias);
                            }
                         }
                         break;

@@ -71,18 +71,13 @@ public class GameLogic extends JPanel implements Serializable {
      * @param rows     the row position, from top to bottom
      * @param columns  the column position, from left to right
      */
-    protected void addToBoard(JLabel jlPlayer, int rows, int columns) {
-        try {
-            board[rows][columns].add(jlPlayer);
-            if (rows == 0 && columns == 0) {
-                JOptionPane.showMessageDialog(null, String.format("%s won!",jlPlayer.getText()) );
-            }
-        } catch (ArrayIndexOutOfBoundsException aioobe) {
-            JOptionPane.showMessageDialog(null, "You failed to land exactly on the last tile.");
-        }
+    protected void addToBoard(JLabel jlPlayer, int rows, int columns, String invokingPlayer) {
+        board[rows][columns].add(jlPlayer);
     }
 
-
+    protected void showLocalizedMessage(String alias){
+        //
+    }
     /**
      * Returns the size of the board (side length).
      * @return the size of the board
@@ -106,14 +101,14 @@ public class GameLogic extends JPanel implements Serializable {
      * @return whether or not the Player is in the Vector
      */
     public boolean containsPlayer(String name) {
-        boolean boob = false;
+        boolean bool = false;
         for (Player p : playerVector) {
             if (p.getContent().equals(name)) {
-                boob = true;
-                return boob;
+                bool = true;
+                return bool;
             }
         }
-        return boob;
+        return bool;
     }
 
     /**
@@ -272,27 +267,36 @@ public class GameLogic extends JPanel implements Serializable {
          * movement pattern.
          * @param positions number of tiles to move
          */
-        protected void move(int positions, boolean ignorePortals) {
+        protected void move(int positions, boolean ignorePortals, String invokingPlayer) {
             int[] endPositions = getEndPosition(positions);
-            addToBoard(this, endPositions[0], endPositions[1]);
 
-            if(!ignorePortals){
-                //Handle portal movement
+            try {
                 BoardTile endTile = board[endPositions[0]][endPositions[1]];
-                System.out.println("Landed on a " + endTile.getPortalType() + " portal!");
-                //Move to the previous orange portal if not the first portal
-                if(endTile.getPortalType().equals("Orange") && orangePortals.indexOf(endTile) > 0 ){
-                    JOptionPane.showMessageDialog(null, "You landed on an orange Portal! Moving to the previous orange portal..");
-                    BoardTile previousOrange = orangePortals.get(orangePortals.indexOf(endTile) - 1);
-                    previousOrange.add(this);
+                addToBoard(this, endPositions[0], endPositions[1], invokingPlayer);
+                if(endPositions[0] == 0 && endPositions[1] == 0){
+                    JOptionPane.showMessageDialog(null, String.format("%s won!",this.getText()) );
                 }
-                //Move to the next blue portal if not the only portal
-                if (endTile.getPortalType().equals("Blue") && bluePortals.size() > 1) {
-                    JOptionPane.showMessageDialog(null, "You landed on a blue Portal! Moving to the next blue portal..");
-                    BoardTile nextBlue = bluePortals.get(bluePortals.indexOf(endTile) + 1);
-                    nextBlue.add(this);
+                if(!ignorePortals && (endTile.getPortalType().equals("Orange") || endTile.getPortalType().equals("Blue"))){
+                    System.out.println("Landed on a " + endTile.getPortalType() + " portal!");
+                    //Move to the previous orange portal if not the first portal
+                    if(endTile.getPortalType().equals("Orange") && orangePortals.indexOf(endTile) > 0 ){
+                        JOptionPane.showMessageDialog(null, "You landed on an orange Portal! Moving to the previous orange portal..");
+                        BoardTile previousOrange = orangePortals.get(orangePortals.indexOf(endTile) - 1);
+                        previousOrange.add(this);
+                    }
+                    //Move to the next blue portal if not the only portal
+                    if (endTile.getPortalType().equals("Blue") && bluePortals.size() > 1) {
+                        JOptionPane.showMessageDialog(null, "You landed on a blue Portal! Moving to the next blue portal..");
+                        BoardTile nextBlue = bluePortals.get(bluePortals.indexOf(endTile) + 1);
+                        nextBlue.add(this);
+                    }
+                }
+            } catch(ArrayIndexOutOfBoundsException aioobe) {
+                if (this.getText().equals(invokingPlayer)) {
+                    JOptionPane.showMessageDialog(null, "You failed to land exactly on the last tile.");
                 }
             }
+
         }
 
         /**
@@ -300,7 +304,7 @@ public class GameLogic extends JPanel implements Serializable {
          * Calls the move() method.
          * @param positions the number of tiles to move
          */
-        protected void moveOneByOne(int positions) {
+        protected void moveOneByOne(int positions, String invokingPlayer) {
             ActionListener alMv1 = new ActionListener() {
                 int counter = positions;
 
@@ -310,10 +314,10 @@ public class GameLogic extends JPanel implements Serializable {
                         //Move ignoring portals except for the last tile
                         if(counter == 1){
                             //System.out.println("Moving 1, not ignoring portals");
-                            move(1, false);
+                            move(1, false, invokingPlayer);
                         } else {
                             //System.out.println("Moving 1, ignoring portals");
-                            move(1, true);
+                            move(1, true, invokingPlayer);
                         }
                         counter--;
                     }
