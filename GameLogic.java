@@ -1,6 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Vector;
 
@@ -10,12 +11,14 @@ import java.util.Vector;
  * @author Alan Chu
  * @version 20191207
  */
-public class GameLogic extends JPanel {
-    private JPanel[][] board;
+public class GameLogic extends JPanel implements Serializable {
+    private BoardTile[][] board;
     private final int BOARD_SIZE;
-    private JPanel jpBoard;
     private Vector<Player> playerVector = new Vector<>();
-
+    private ArrayList<BoardTile> bluePortals = new ArrayList<>();
+    private ArrayList<BoardTile> orangePortals = new ArrayList<>();
+    private final ImageIcon orangePortalIcon = new ImageIcon("media/orangePortal160by160.png");
+    private final ImageIcon bluePortalIcon = new ImageIcon("media/bluePortal160by160.png");
     /**
      * Construct the GUI and make a board with the specified parameters.
      * @param boardSize the side length of the board
@@ -23,35 +26,41 @@ public class GameLogic extends JPanel {
     public GameLogic(int boardSize) {
         BOARD_SIZE = boardSize;
 
-        //Center Panel: The Game Board
-        jpBoard = new JPanel();
-        jpBoard.setMinimumSize(new Dimension(800, 800));
-        jpBoard.setLayout(new GridLayout(BOARD_SIZE, BOARD_SIZE));
+        //Panel initialization
+        Dimension panelSz = new Dimension(800,800);
+        setPreferredSize(panelSz);
+        setMinimumSize(panelSz);
+        setMaximumSize(panelSz);
+        setLayout(new GridLayout(BOARD_SIZE, BOARD_SIZE));
+
         //Create a 2D array of JPanels and fill it up. We do this so we can reference them later in the code.
-        board = new JPanel[BOARD_SIZE][BOARD_SIZE];
+        board = new BoardTile[BOARD_SIZE][BOARD_SIZE];
         for (int i = 0; i < BOARD_SIZE; i++) {
             for (int j = 0; j < BOARD_SIZE; j++) {
-                JPanel jpIJ = new JPanel();
-                jpIJ.setPreferredSize(new Dimension(100, 100));
+                BoardTile jpIJ = new BoardTile();
+                Dimension squareSz = new Dimension(800 / BOARD_SIZE, 800 / BOARD_SIZE);
+                jpIJ.setPreferredSize(squareSz);
+                jpIJ.setMinimumSize(squareSz);
+                jpIJ.setMaximumSize(squareSz);
                 jpIJ.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
                 board[i][j] = jpIJ;
-                jpBoard.add(board[i][j]);
+                add(board[i][j]);
             }
         } //end of for loop
-        add(jpBoard, BorderLayout.CENTER);
 
-        //Some testing with a swing Timer
-        ActionListener alRefresh = new ActionListener() {
-            public void actionPerformed(ActionEvent ae) {
-                repaint();
-                revalidate();
-            }
-        };
-        //Repaint and re-validate every 30 milliseconds (could also do this in the addToBoard method)
-        Timer timer = new Timer(30, alRefresh);
-        timer.start();
+        /*
+         * Hard-coding portals:
+         * When you add orange portals, make sure you add in ascending board order so that when you land
+         * on a portal there will be a portal to go back to.
+         */
+        //Orange Portals
+        board[4][4].makePortal("Orange");
+        board[3][3].makePortal("Orange");
+        //Blue Portals
+        board[3][2].makePortal("Blue");
+        board[2][0].makePortal("Blue");
 
-        //Panel initialization
+//        System.out.println("Orange portals list size: " + orangePortals.size());
         setVisible(true);
     }
 
@@ -62,33 +71,17 @@ public class GameLogic extends JPanel {
      * @param rows     the row position, from top to bottom
      * @param columns  the column position, from left to right
      */
-    public void addToBoard(JLabel jlPlayer, int rows, int columns) {
+    protected void addToBoard(JLabel jlPlayer, int rows, int columns) {
         try {
             board[rows][columns].add(jlPlayer);
             if (rows == 0 && columns == 0) {
                 JOptionPane.showMessageDialog(null, String.format("%s won!",jlPlayer.getText()) );
-            }
-            else if(rows == 3 && columns == 2){
-               JOptionPane.showMessageDialog(null,"Landed on portal!");
-               
-               rows = 4;
-               columns = 4;
-               board[rows][columns].add(jlPlayer);
-               
             }
         } catch (ArrayIndexOutOfBoundsException aioobe) {
             JOptionPane.showMessageDialog(null, "You failed to land exactly on the last tile.");
         }
     }
 
-    /**
-     * Clears the board by calling each player's remove method.
-     */
-    public void clearBoard() {
-        for(Player player: playerVector) {
-            player.remove();
-        }
-    }
 
     /**
      * Returns the size of the board (side length).
@@ -106,11 +99,42 @@ public class GameLogic extends JPanel {
         return playerVector;
     }
 
+
+    /**
+     * Checks the Player Vector to see if a Player with the same name is in it.
+     * @param name the name to check for in the Vector
+     * @return whether or not the Player is in the Vector
+     */
+    public boolean containsPlayer(String name) {
+        boolean boob = false;
+        for (Player p : playerVector) {
+            if (p.getContent().equals(name)) {
+                boob = true;
+                return boob;
+            }
+        }
+        return boob;
+    }
+
+    /**
+     * A textual representation of the board, including Players.
+     * @return a String describing the board
+     */
+    public String toString(){
+        StringBuilder sbGL = new StringBuilder();
+        sbGL.append("Board Summary");
+        sbGL.append("\n");
+        for(Player p: playerVector){
+            sbGL.append(p.returnPos());
+        }
+        return sbGL.toString();
+    }
+
     protected class Player extends JLabel {
         private final String name;
 
         /**
-         * Constructs a Player with a name sets the JLabel text.
+         * Constructs a Player with a name and sets the JLabel text.
          * @param _name    the player's name
          */
         public Player(String _name) {
@@ -156,26 +180,19 @@ public class GameLogic extends JPanel {
         /**
          * Removes the player from the board.
          */
-        public void remove() {
-            try {
-                /*
-                 * Get the coordinates from returnIntPos() then use them to access
-                 * that position in the board[][] array and call the remove() method.
-                 */
-                int[] coords = returnIntPos();
-                //issue: if the player isn't found the coords will be [0][0]?
-                board[coords[0]][coords[1]].remove(this);
-            } catch (NullPointerException npe) {
-                npe.printStackTrace();
-            }
+        protected void remove() {
+            int[] coords = returnIntPos();
+            /*
+             * Get the coordinates from returnIntPos() then use them to access
+             * that position in the board[][] array and call the remove() method.
+             */
+            board[coords[0]][coords[1]].remove(this);
+            playerVector.remove(this);
+            //issue: if the player isn't found the coords will be [0][0]?
+
         }
 
-        /**
-         * Moves the player on the board according to the Snakes and Ladders
-         * movement pattern.
-         * @param positions number of tiles to move
-         */
-        public void move(int positions) {
+        protected int[] getEndPosition(int positions){
             //Grab the current coordinates
             int[] coords = returnIntPos();
             int rows = coords[0];
@@ -184,6 +201,7 @@ public class GameLogic extends JPanel {
             int rowsTo = rows;
             int columnsTo;
             int moveBank = positions;
+            int[] endPosition;
             //System.out.println("BARNEY " + positions/BOARD_SIZE);
             /*
              * Case 1: If the quantity of moves is greater or equal to 8
@@ -226,8 +244,8 @@ public class GameLogic extends JPanel {
              * left
              *
              * All a negative index means is that you should shift a row upwards to the last
-             * column like in Snakes and Ladders. 
-             * This same logic is repeated in the first if statement because it is how you 
+             * column like in Snakes and Ladders.
+             * This same logic is repeated in the first if statement because it is how you
              * should handle a situation where moving left would create an error.
              */
             else if (columns - (positions % BOARD_SIZE) < 0) {
@@ -235,13 +253,7 @@ public class GameLogic extends JPanel {
                 rowsTo--;
                 columnsTo = (BOARD_SIZE + (columns - positions));
             }
-            
-            //else if(columns == 3 && rows == 2){
-              // rowsTo = 4;
-               //columnsTo = 4;
-            //}
-            
-            //else 
+
             /*
              * Case 3: If the quantity of moves would not cause any errors and is less than
              * 8.
@@ -251,8 +263,36 @@ public class GameLogic extends JPanel {
 //                System.out.println("entered if 3");
                 columnsTo = columns - moveBank;
             }
-            
-            addToBoard(this, rowsTo, columnsTo);
+            endPosition = new int[]{rowsTo, columnsTo};
+            return endPosition;
+        }
+
+        /**
+         * Moves the player on the board according to the Snakes and Ladders
+         * movement pattern.
+         * @param positions number of tiles to move
+         */
+        protected void move(int positions, boolean ignorePortals) {
+            int[] endPositions = getEndPosition(positions);
+            addToBoard(this, endPositions[0], endPositions[1]);
+
+            if(!ignorePortals){
+                //Handle portal movement
+                BoardTile endTile = board[endPositions[0]][endPositions[1]];
+                System.out.println("Landed on a " + endTile.getPortalType() + " portal!");
+                //Move to the previous orange portal if not the first portal
+                if(endTile.getPortalType().equals("Orange") && orangePortals.indexOf(endTile) > 0 ){
+                    JOptionPane.showMessageDialog(null, "You landed on an orange Portal! Moving to the previous orange portal..");
+                    BoardTile previousOrange = orangePortals.get(orangePortals.indexOf(endTile) - 1);
+                    previousOrange.add(this);
+                }
+                //Move to the next blue portal if not the only portal
+                if (endTile.getPortalType().equals("Blue") && bluePortals.size() > 1) {
+                    JOptionPane.showMessageDialog(null, "You landed on a blue Portal! Moving to the next blue portal..");
+                    BoardTile nextBlue = bluePortals.get(bluePortals.indexOf(endTile) + 1);
+                    nextBlue.add(this);
+                }
+            }
         }
 
         /**
@@ -260,14 +300,21 @@ public class GameLogic extends JPanel {
          * Calls the move() method.
          * @param positions the number of tiles to move
          */
-        public void moveOneByOne(int positions) {
+        protected void moveOneByOne(int positions) {
             ActionListener alMv1 = new ActionListener() {
                 int counter = positions;
 
                 @Override
                 public void actionPerformed(ActionEvent e) {
                     if (counter != 0) {
-                        move(1);
+                        //Move ignoring portals except for the last tile
+                        if(counter == 1){
+                            //System.out.println("Moving 1, not ignoring portals");
+                            move(1, false);
+                        } else {
+                            //System.out.println("Moving 1, ignoring portals");
+                            move(1, true);
+                        }
                         counter--;
                     }
                 }
@@ -276,9 +323,13 @@ public class GameLogic extends JPanel {
             timer.start();
         }
 
-        public void addToAlPlayers(){
+        /**
+         * Adds this Player to the Player Vector in the GameLogic class.
+         */
+        protected void addToPlayersVector(){
             playerVector.add(this);
         }
+
         /**
          * Returns the player's name.
          * @return the player's name
@@ -294,6 +345,53 @@ public class GameLogic extends JPanel {
         public String getContent() {
             return getText();
         }
+
+    }
+
+    protected class BoardTile extends JPanel{
+        private boolean isOrangePortal = false;
+        private boolean isBluePortal = false;
+
+        /**
+         * Returns a textual representation of the type of portal.
+         * @return a textual representation of the type of portal.
+         */
+        public String getPortalType(){
+            String portalType = "";
+            if(isOrangePortal){
+                portalType = "Orange";
+            } else if(isBluePortal) {
+                portalType = "Blue";
+            }
+            return portalType;
+        }
+
+        /**
+         * Makes this tile an orange or blue tile.
+         * Sets the isOrangePortal/isBluePortal booleans depending on the parameters.
+         * Changes the color of the tile depending on the parameters.
+         * @param portalColor the type of tile you wish to change this tile to
+         */
+        public void makePortal(String portalColor){
+            if(portalColor.equals("Orange") && !isOrangePortal){
+                isOrangePortal = true;
+                orangePortals.add(this);
+                this.setBackground(Color.ORANGE);
+//                JLabel orangePortalBG = new JLabel();
+//                orangePortalBG.setIcon(orangePortalIcon);
+//                add(orangePortalBG);
+            } else if(portalColor.equals("Blue") && !isBluePortal) {
+                isBluePortal = true;
+                bluePortals.add(this);
+                this.setBackground(Color.CYAN);
+//                JLabel bluePortalBG = new JLabel();
+//                bluePortalBG.setIcon(bluePortalIcon);
+//                add(bluePortalBG);
+            } else {
+                System.out.println("That board is already a tile.");
+            }
+        }
+
 
     }
 }

@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.Timer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.*;
@@ -8,8 +9,9 @@ import javax.swing.*;
 public class Server extends JFrame{
    private Vector<ClientHandler> clientThreads = new Vector<>();
    private static final int PORT = 4242;
-   private Vector<GameLogic.Player> playerVector = new Vector<>();
+   private GameLogic updatedGL;
    private final Random rand;
+
    /**
     * The server's default constructor.
     * Accepts client connections.
@@ -142,10 +144,8 @@ public class Server extends JFrame{
 
    //A thread class to handle clients.
    protected class ClientHandler extends Thread {
-      private ObjectInputStream ois;
       private ObjectOutputStream oos;
       private Socket mySocket;
-      private RollRequest srr;
 
       /**
        * Constructor for the ClientHandler class.
@@ -154,7 +154,7 @@ public class Server extends JFrame{
       public ClientHandler(Socket s){
          mySocket = s;
       }
-      
+
       /**
        * The server's run method.
        * Opens I/O streams for clients.
@@ -162,60 +162,79 @@ public class Server extends JFrame{
       public void run(){
          boolean nameGet = false;
          try{
-            ois = new ObjectInputStream(mySocket.getInputStream());
+            ObjectInputStream ois = new ObjectInputStream(mySocket.getInputStream());
             oos = new ObjectOutputStream(mySocket.getOutputStream());
+
             //Listen for messages and RollRequest objects.
             while(true){
                DataWrapper dw = (DataWrapper) ois.readObject();
                //Get the name from the InputStream if not retrieved already
                if(!nameGet){
+                  //Store the client's first message, which is always in the format "<name> connected."
                   String line = "";
                   if(dw.getType() == DataWrapper.STRINGCODE){
                      line = dw.getMessage();
                   }
                   System.out.println(line);
-                  /* Following code extracts the name from the "CLIENT connected"
-                   * String. Works by splitting the String into an array and removing
-                   * the last element.
+
+                  /*
+                   * Extract the alias from the String by getting the substring from 0 to the last index of whitespace,
+                   * effectively removing the " connected." part of the String.
                    */
-                  String[] aliasArray = line.split("\\s+");
-                  StringBuilder alias = new StringBuilder();
-                  for(int i = 0; i < aliasArray.length - 1; i++){
-                     //Do not append a space if at the second to last element
-                     if( i == (aliasArray.length - 2)){
-                        alias.append(aliasArray[i]);
-                     } else {
-                        alias.append(aliasArray[i]).append(" ");
-                     }
-                  }
+                  String alias = line.substring(0, line.lastIndexOf(" "));
+
                   //Disconnect the client if the name is already in use
-                  if(getIndex(alias.toString()) != -1){
+                  if(getIndex(alias) != -1){
                      oos.writeObject(
                              new DataWrapper(
                                      DataWrapper.STRINGCODE, "Sorry, that name is in use. Disconnecting..", false));
                      oos.flush();
                      mySocket.close();
                   }
-                  this.setName(alias.toString());
+
+                  this.setName(alias);
                   nameGet = true;
+
                   //Tell all clients to add the new client to the board
-                  sendCTToAll(new ControlToken(ControlToken.ADDCODE, alias.toString()));
-                  //Retrieve an updated board from a player and send it to this client
-                  requestBoard();
-                  oos.writeObject(new DataWrapper(DataWrapper.PLYLISTCODE,playerVector));
+                  sendCTToAll(new ControlToken(ControlToken.ADDCODE, alias));
+
+                  /*
+                   * For all players other than the first, request an updated board from the first Client in the Vector
+                   * and send it players when the first connect.
+                   */
+                  if(clientThreads.get(0) != this) {
+                     //Retrieve an updated board from a player and send it to this client
+                     requestBoard();
+                     //Wait 1250 milliseconds before writing updatedGL. The Client will send an updated board in this time.
+                     Timer timer = new Timer();
+                     TimerTask ttWriteBoard = new TimerTask() {
+                        @Override
+                        public void run() {
+                           try {
+                              oos.writeObject(new DataWrapper(DataWrapper.GLCODE, updatedGL));
+                              oos.flush();
+                           } catch (IOException ioe) {
+                              ioe.printStackTrace();
+                           }
+                        }
+                     };
+                     timer.schedule(ttWriteBoard, 1250);
+                  }
+
                }
+               //Handle DataWrapper objects
                switch(dw.getType()){
-                  //Handle messages
+                  //Handle chat messages
                   case DataWrapper.STRINGCODE:
                      //Send client messages to all clients, appending sender name
                      String fmtMessage = String.format("%s: %s", this.getName(), dw.getMessage());
                      sendToAll(fmtMessage);
                      System.out.println(fmtMessage);
                      break;
-                     
+
                   //Handle RollRequest objects
                   case DataWrapper.RRCODE:
-                     srr = dw.getRR();
+                     RollRequest srr = dw.getRR();
                      //Obtain the roll result and send it to all clients.
                      int rolledResult = rollResult();
                      String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rolledResult);
@@ -225,34 +244,42 @@ public class Server extends JFrame{
                              ControlToken.MOVECODE, this.getName(), rolledResult, true));
                      System.out.println(fmtRR);
                      break;
-                  //Store updated incoming Player Vectors in a global variable
-                  case DataWrapper.PLYLISTCODE:
-                     playerVector = dw.getVecPlayers();
-                     System.out.printf("Received a Player Vector of size %d.\n", playerVector.size());
+
+                  //Store the updated board in a variable to be sent to connecting players
+                  case DataWrapper.GLCODE:
+                     updatedGL = dw.getGL();
+                     System.out.printf("Received a GameLogic with %d players.\n", dw.getGL().getPlayerVector().size());
+                     System.out.println(updatedGL.toString());
                      break;
+
                   //Default case
                   default:
                      System.err.println("Error: invalid DataWrapper.type");
-                     
+                     break;
                } //end of switch statement
             } //end of while loop
          } catch(ClassNotFoundException cnfe) {
             System.err.println("Error: class not found " + cnfe.getMessage());
          } catch(SocketException se) {
-            //In the case of a disconnection, remove them from the ClientHandler Vector and send a ControlToken
-            //to all remaining clients telling them to remove the player.
-            System.err.println(this.getName() + " disconnected.");
-            clientThreads.remove(getIndex(this.getName()));
-            sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
+            handleDisconnect();
          } catch(EOFException eofe) {
-            System.err.println(this.getName() + " disconnected.");
-            clientThreads.remove(getIndex(this.getName()));
-            sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
+            handleDisconnect();
          } catch(IOException ioe) {
             ioe.printStackTrace();
          }
       } //end of run method
 
+      /**
+       * Handles client disconnections.
+       * Removes this client from the clientThreads Vector, informs other clients that the client has disconnected,
+       * and tells them remove them from their board.
+       */
+      public void handleDisconnect(){
+         System.err.println(this.getName() + " disconnected.");
+         clientThreads.remove(getIndex(this.getName()));
+         sendToAll(this.getName() + " disconnected.");
+         sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
+      }
 
       /**
        * Returns a random number from 1 to 6.
@@ -261,7 +288,7 @@ public class Server extends JFrame{
       public int rollResult(){
          return rand.nextInt(6) + 1;
       }
-      
+
       /**
        * Sends a ControlToken to this ClientHandler's socket, telling
        * it to enable the roll button.
@@ -274,7 +301,7 @@ public class Server extends JFrame{
             ioe.printStackTrace();
          }
       }
-      
+
       /**
        * Sends a ControlToken to this ClientHandler's socket, telling
        * it to disable the roll button.
@@ -287,7 +314,7 @@ public class Server extends JFrame{
             ioe.printStackTrace();
          }
       }
-      
+
       /**
        * Returns the ObjectOutputStream of this ClientHandler.
        * @return oos this ClientHandler's ObjectOutputStream
@@ -324,7 +351,7 @@ public class Server extends JFrame{
             }
             ArrayList<String> cmdSplit = new ArrayList<>();
 
-            //Split the line by spaces except between quotes and add to the cmdSplit arraylist
+            //Split the line by spaces except between quotes and add to the cmdSplit ArrayList
             Matcher matcher = Pattern.compile("([^\"]\\S*|\".+?\")\\s*").matcher(consoleLine);
             while(matcher.find()) cmdSplit.add(matcher.group(1).replace("\"", ""));
 

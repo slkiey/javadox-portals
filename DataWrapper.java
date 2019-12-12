@@ -10,15 +10,15 @@ public class DataWrapper implements Serializable{
     * Code for a String: 0
     * Code for a RollRequest: 1
     * Code for a ControlToken: 2
-    * Code for Player list
+    * Code for GameLogic object: 3
     */
-   protected static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2, PLYLISTCODE = 3;
+   protected static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2, GLCODE = 3;
    private int type;
    String message;
    RollRequest rr;
    ControlToken ct;
    boolean isGameMessage;
-   Vector<GameLogic.Player> vecPlayers;
+   GameLogic gl;
 
    /** 
     * A constructor for the DataWrapper class.
@@ -55,9 +55,9 @@ public class DataWrapper implements Serializable{
    }
 
 
-   public DataWrapper(int type, Vector<GameLogic.Player> _vecPlayers){
+   public DataWrapper(int type, GameLogic gameLogic){
       this.type = type;
-      vecPlayers = _vecPlayers;
+      gl = gameLogic;
    }
 
    /**
@@ -92,8 +92,6 @@ public class DataWrapper implements Serializable{
       return ct;
    }
 
-   public Vector<GameLogic.Player> getVecPlayers(){
-      return vecPlayers;
-   }
+   public GameLogic getGL() { return gl; }
    
 }

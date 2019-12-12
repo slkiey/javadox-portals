@@ -5,11 +5,13 @@ import java.awt.event.*;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import javax.swing.*;
+import javax.swing.Timer;
 import javax.swing.text.JTextComponent;
 import javax.swing.border.EmptyBorder;
 
 public class Client extends JFrame {
    private final int PORT = 4242;
+   private GameLogic glClient;
    private String ip;
    private String alias;
    private ObjectInputStream ois;
@@ -22,14 +24,13 @@ public class Client extends JFrame {
    private JButton jbRoll;
    private StringBuilder chatLog = new StringBuilder();
    private StringBuilder gmLog = new StringBuilder();
-   private GameLogic glClient;
+   private JPanel jpCenter;
    
    /**
     * Default constructor for the Client class.
     * Handles GUI.
     */
    public Client(){
-
       //NORTH Panel: Alias, Roll Dice, IP, Connect, Disconnect
       JPanel jpNorth = new JPanel();
       //Creating the alias text field
@@ -37,7 +38,7 @@ public class Client extends JFrame {
       jtfAlias.setToolTipText("Enter name here");
       jtfAlias.addFocusListener(new FocListener());
       //Creating the IP text field
-      JTextField jtfIP = new JTextField("Enter IP Address", 10);
+      JTextField jtfIP = new JTextField("127.0.0.1", 10);
       jtfIP.setToolTipText("Enter IP Address here");
       jtfIP.addFocusListener(new FocListener());
       //Creating the disconnect and connect buttons
@@ -55,7 +56,10 @@ public class Client extends JFrame {
             try{
                //Clear the board when disconnecting
                System.out.println("Disconnecting..");
-               glClient.clearBoard();
+               System.out.println("Clearing the board and vector of " + glClient.getPlayerVector().size() + " players.");
+               clearBoard();
+               glClient = new GameLogic(5);
+               addBoard(glClient);
                sock.close();
                jbDisconnect.setEnabled(false);
                jbConnect.setEnabled(true);
@@ -176,7 +180,10 @@ public class Client extends JFrame {
       JScrollPane jspScrollGM = new JScrollPane(jtaDisplayGM, 
                                                 ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, 
                                                 ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-      
+
+      //CENTER Panel: Container for the board, helps with sizing
+      jpCenter = new JPanel();
+
       //Add components to the North, West, and East panels
       jpNorth.add(jtfAlias);
       jpNorth.add(jtfIP);
@@ -187,18 +194,31 @@ public class Client extends JFrame {
       jpWest.add(jtfSendMsgs, BorderLayout.SOUTH);
       jpEast.add(jlPlayerMoves, BorderLayout.NORTH);
       jpEast.add(jspScrollGM, BorderLayout.CENTER);
+      jpCenter.add(glClient = new GameLogic(5));
+
       //Add padding to make West and East regions prettier
       jpWest.setBorder(new EmptyBorder(0, 10, 5, 10));
       jpEast.setBorder(new EmptyBorder(0, 10, 30, 10));
+
       //Adding the North, West, and East panels to the JFrame
       add(jpNorth, BorderLayout.NORTH);
       add(jpWest, BorderLayout.WEST);
       add(jpEast,BorderLayout.EAST);
-      add(glClient = new GameLogic(5), BorderLayout.CENTER);
+      add(jpCenter, BorderLayout.CENTER);
+
+      //Use a Timer to repaint and re-validate every 30 milliseconds (could also do this in the addToBoard method)
+      ActionListener alRefresh = new ActionListener() {
+         public void actionPerformed(ActionEvent ae) {
+            repaint();
+            revalidate();
+         }
+      };
+      Timer timer = new Timer(30, alRefresh);
+      timer.start();
+
       //Initialize the JFrame
 //      pack();
-      setSize(1066, 800);
-      setResizable(false);
+      setSize(1350, 900);
       setDefaultCloseOperation(EXIT_ON_CLOSE);
       setVisible(true);
       setLocationRelativeTo(null);
@@ -229,20 +249,39 @@ public class Client extends JFrame {
       }
    }
 
-   public GameLogic getGlClient(){
+   /**
+    * Returns the gameLogic instance variable.
+    * @return glClient
+    */
+   public GameLogic getGlClient() {
       return glClient;
+   }
+
+   /**
+    * Removes the current board JPanel from jpCenter.
+    */
+   public void clearBoard(){
+      jpCenter.remove(glClient);
+   }
+
+   /**
+    * Adds a board JPanel to jpCenter.
+    * @param gl the GameLogic JPanel to be added
+    */
+   public void addBoard(GameLogic gl){
+      jpCenter.add(gl);
    }
 
    //Listens for incoming messages/objects
    protected class ObjectListener extends Thread{
-      
+
       /**
        * The run method for the ObjectListener class.
        * Processes incoming Objects from the server.
        */
       public void run(){
-         try{ 
-            ois = new ObjectInputStream(sock.getInputStream()); 
+         try{
+            ois = new ObjectInputStream(sock.getInputStream());
          } catch(IOException ioe) {
             ioe.printStackTrace();
          }
@@ -278,65 +317,84 @@ public class Client extends JFrame {
                      jtaDisplayMsgs.setText(chatLog.toString());
                   }
                   break;
-               //Handle incoming player ArrayLists
-               case DataWrapper.PLYLISTCODE:
-                  //Unpack the player ArrayList (add to board) once received
-                  try {
-                     System.out.printf("Unpacking the vector..\nSize: %d\n", dw.getVecPlayers().size());
-                     for(GameLogic.Player p: dw.getVecPlayers()){
-                        glClient.addToBoard(p, p.returnIntPos()[0], p.returnIntPos()[1]);
-                     }
-                  } catch(NullPointerException npe) {
-                     npe.printStackTrace();
-                  }
+
+               //Handle GameLogic boards
+               case DataWrapper.GLCODE:
+                  clearBoard();
+                  glClient = dw.getGL();
+                  System.out.println(glClient.toString());
+                  addBoard(glClient);
+                  revalidate();
+                  repaint();
                   break;
+
                //Handle incoming ControlToken objects
                case DataWrapper.CTCODE:
                   ControlToken ct = dw.getCT();
                   switch(ct.getCode()){
+                     //Enable the roll button
                      case ControlToken.ENABLECODE:
-                        //Enable the roll button
                         jbRoll.setEnabled(true);
                         break;
+
+                     //Disable the roll button
                      case ControlToken.DISABLECODE:
-                        //Disable the roll button
                         jbRoll.setEnabled(false);
                         break;
+
+                     //Add the player to the starting tile if they're not already on the board
                      case ControlToken.ADDCODE:
-                        //Add the player to the starting tile
-                        GameLogic.Player playerLabel = glClient.new Player(ct.getPlayerName());
-                        glClient.addToBoard(playerLabel, glClient.getBoardSize()-1, glClient.getBoardSize()-1);
-                        playerLabel.addToAlPlayers();
+                        if(!glClient.containsPlayer(ct.getPlayerName())) {
+                           GameLogic.Player playerLabel = glClient.new Player(ct.getPlayerName());
+                           glClient.addToBoard(playerLabel, glClient.getBoardSize() - 1, glClient.getBoardSize() - 1);
+                           playerLabel.addToPlayersVector();
+                        }
                         break;
+
+                     //Search the players list for the player and move that player the number of spots
                      case ControlToken.MOVECODE:
-                        //Search the players list for the player and move that player the number of spots
                         for(GameLogic.Player player: glClient.getPlayerVector()){
                            if(player.getContent().equals(ct.getPlayerName())){
                               if(!ct.getOneByOne())
-                                 player.move(ct.getTilesToMove());
+                                 player.move(ct.getTilesToMove(), false);
                               if(ct.getOneByOne())
                                  player.moveOneByOne(ct.getTilesToMove());
                            }
                         }
                         break;
+
+                     //Remove the specified player from the board and Player Vector
                      case ControlToken.REMOVECODE:
-                        //Search the players list for the player and remove them
-                        for(GameLogic.Player player: glClient.getPlayerVector()){
-                           if(player.getContent().equals(ct.getPlayerName())){
+                        for (GameLogic.Player player : glClient.getPlayerVector()) {
+                           if (player.getContent().equals(ct.getPlayerName())) {
                               player.remove();
+                              break;
                            }
                         }
                         break;
+
+                     //Send GameLogic to the server
                      case ControlToken.BOARDREQUEST:
-                        //Send the players list to the Server
-                        try {
-                           System.out.printf("Board request received. Sending a playerVector of %d players.\n", glClient.getPlayerVector().size());
-                           oos.writeObject(new DataWrapper(DataWrapper.PLYLISTCODE, glClient.getPlayerVector()));
-                           oos.flush();
-                        } catch (IOException e) {
-                           e.printStackTrace();
-                        }
+                        //Include a 500ms delay so the client can add the connecting player before it sends the board
+                        TimerTask ttSendBoard = new TimerTask() {
+                           @Override
+                           public void run() {
+                              try {
+                                 System.out.println("Writing glClient to server...");
+                                 System.out.println(getGlClient().toString());
+                                 oos.reset();
+                                 oos.writeObject(new DataWrapper(DataWrapper.GLCODE, getGlClient()));
+                                 oos.flush();
+                              } catch (IOException e) {
+                                 e.printStackTrace();
+                              }
+                           }
+                        };
+                        java.util.Timer timer = new java.util.Timer();
+                        timer.schedule(ttSendBoard, 750);
+
                         break;
+
                      default:
                         System.err.println("Error: invalid ControlToken code.");
                         break;
@@ -347,7 +405,7 @@ public class Client extends JFrame {
                default:
                   System.err.println("Error: invalid DataWrapper type.");
                   break;
-                  
+
             } //end of switch statement
          } //end of while loop
       }  //end of run method
