@@ -1,6 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Vector;
@@ -14,11 +15,15 @@ import java.util.Vector;
 public class GameLogic extends JPanel implements Serializable {
     private BoardTile[][] board;
     private final int BOARD_SIZE;
+    private static final long serialVersionUID = 41L;
     private Vector<Player> playerVector = new Vector<>();
     private ArrayList<BoardTile> bluePortals = new ArrayList<>();
     private ArrayList<BoardTile> orangePortals = new ArrayList<>();
-    private final ImageIcon orangePortalIcon = new ImageIcon("media/orangePortal160by160.png");
-    private final ImageIcon bluePortalIcon = new ImageIcon("media/bluePortal160by160.png");
+    private volatile boolean turnFinished = false;
+
+//     private final ImageIcon orangePortalIcon = new ImageIcon("media/orangePortal160by160.png");
+//     private final ImageIcon bluePortalIcon = new ImageIcon("media/bluePortal160by160.png");
+
     /**
      * Construct the GUI and make a board with the specified parameters.
      * @param boardSize the side length of the board
@@ -71,13 +76,36 @@ public class GameLogic extends JPanel implements Serializable {
      * @param rows     the row position, from top to bottom
      * @param columns  the column position, from left to right
      */
-    protected void addToBoard(JLabel jlPlayer, int rows, int columns, String invokingPlayer) {
+    protected void addToBoard(JLabel jlPlayer, int rows, int columns) {
         board[rows][columns].add(jlPlayer);
     }
 
-    protected void showLocalizedMessage(String alias){
-        //
+    protected void setTurnFinished(boolean bool) {
+        turnFinished = bool;
     }
+
+    /**
+     * Adds this Player to the Player Vector in the GameLogic class.
+     */
+    protected void addToPlayersVector(Player player){
+//        System.out.println("Size before " + playerVector.size());
+        playerVector.add(player);
+//        System.out.println("Size after " + playerVector.size());
+    }
+
+    /**
+     * Compares the current player with the player who called the method (in this case, move() ).
+     * If they are the same, displays the message on this client's screen.
+     * @param currentPlayer the player being moved
+     * @param invokingPlayer who called the move method (see Client class)
+     * @param message the message to display
+     */
+    protected void showLocalizedMessage(String currentPlayer, String invokingPlayer, String message) {
+        if(currentPlayer.equals(invokingPlayer)){
+            JOptionPane.showMessageDialog(null, message);
+        }
+    }
+
     /**
      * Returns the size of the board (side length).
      * @return the size of the board
@@ -125,14 +153,28 @@ public class GameLogic extends JPanel implements Serializable {
         return sbGL.toString();
     }
 
+    public boolean getTurnFinished(){
+        return turnFinished;
+    }
+
     protected class Player extends JLabel {
         private final String name;
+        private static final long serialVersionUID = 42L;
 
         /**
          * Constructs a Player with a name and sets the JLabel text.
          * @param _name    the player's name
          */
-        public Player(String _name) {
+        public Player(String _name, int pawnCode) {
+
+//            String filePath = new File("").getAbsolutePath();
+//            filePath.concat("path to the property file");
+//            System.out.println(filePath);
+
+            String iconPath = "media/" + pawnCode + ".png";
+            ImageIcon icon = new ImageIcon(iconPath);
+            setIcon(icon);
+
             setText(_name);
             name = _name;
         }
@@ -142,12 +184,13 @@ public class GameLogic extends JPanel implements Serializable {
          * @return a String with the rows and columns of the player
          */
         public String returnPos() {
-            String position = String.format("%s not found on the board.", getName());
+            String position = String.format("%s not found on the board.\n", getName());
             for (int i = 0; i < board.length; i++) {
                 for (int j = 0; j < board.length; j++) {
                     if (board[i][j].isAncestorOf(this)) {
                         //Add one to the indices because arrays start at 0
                         position = String.format("%s's position: Rows: %d Columns: %d\n", getName(), i + 1, j + 1);
+                        return position;
                     }
                 }
             } //end of for loop
@@ -269,10 +312,13 @@ public class GameLogic extends JPanel implements Serializable {
          */
         protected void move(int positions, boolean ignorePortals, String invokingPlayer) {
             int[] endPositions = getEndPosition(positions);
+            System.out.printf("Moving to position [%d][%d]\n", endPositions[0], endPositions[1]);
 
-            try {
+            if(endPositions[0] < 0 || endPositions[1] < 0){
+                showLocalizedMessage(getName(), invokingPlayer,"You failed to land exactly on the last tile.");
+            } else {
                 BoardTile endTile = board[endPositions[0]][endPositions[1]];
-                addToBoard(this, endPositions[0], endPositions[1], invokingPlayer);
+                addToBoard(this, endPositions[0], endPositions[1]);
                 if(endPositions[0] == 0 && endPositions[1] == 0){
                     JOptionPane.showMessageDialog(null, String.format("%s won!",this.getText()) );
                 }
@@ -280,22 +326,19 @@ public class GameLogic extends JPanel implements Serializable {
                     System.out.println("Landed on a " + endTile.getPortalType() + " portal!");
                     //Move to the previous orange portal if not the first portal
                     if(endTile.getPortalType().equals("Orange") && orangePortals.indexOf(endTile) > 0 ){
-                        JOptionPane.showMessageDialog(null, "You landed on an orange Portal! Moving to the previous orange portal..");
+                        showLocalizedMessage(getName(), invokingPlayer, "You landed on an orange Portal! Moving to the previous orange portal..");
                         BoardTile previousOrange = orangePortals.get(orangePortals.indexOf(endTile) - 1);
                         previousOrange.add(this);
                     }
                     //Move to the next blue portal if not the only portal
-                    if (endTile.getPortalType().equals("Blue") && bluePortals.size() > 1) {
-                        JOptionPane.showMessageDialog(null, "You landed on a blue Portal! Moving to the next blue portal..");
+                    if (endTile.getPortalType().equals("Blue") && bluePortals.size() > 1 && (bluePortals.indexOf(endTile) != bluePortals.size() -1)) {
+                        showLocalizedMessage(getName(), invokingPlayer,"You landed on a blue Portal! Moving to the next blue portal..");
                         BoardTile nextBlue = bluePortals.get(bluePortals.indexOf(endTile) + 1);
                         nextBlue.add(this);
                     }
                 }
-            } catch(ArrayIndexOutOfBoundsException aioobe) {
-                if (this.getText().equals(invokingPlayer)) {
-                    JOptionPane.showMessageDialog(null, "You failed to land exactly on the last tile.");
-                }
             }
+            turnFinished = true;
 
         }
 
@@ -305,33 +348,33 @@ public class GameLogic extends JPanel implements Serializable {
          * @param positions the number of tiles to move
          */
         protected void moveOneByOne(int positions, String invokingPlayer) {
-            ActionListener alMv1 = new ActionListener() {
-                int counter = positions;
+            //If you're going to overshoot, display an error message instead.
+            int[] endPositions = getEndPosition(positions);
+            System.out.printf("Moving one by one to position [%d][%d]\n", endPositions[0], endPositions[1]);
+            if(endPositions[0] < 0 ) {
+                showLocalizedMessage(getName(), invokingPlayer,"You failed to land exactly on the last tile.");
+            } else {
+                ActionListener alMv1 = new ActionListener() {
+                    int counter = positions;
 
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    if (counter != 0) {
-                        //Move ignoring portals except for the last tile
-                        if(counter == 1){
-                            //System.out.println("Moving 1, not ignoring portals");
-                            move(1, false, invokingPlayer);
-                        } else {
-                            //System.out.println("Moving 1, ignoring portals");
-                            move(1, true, invokingPlayer);
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        if (counter != 0) {
+                            //Move ignoring portals except for the last tile
+                            if (counter == 1) {
+                                //System.out.println("Moving 1, not ignoring portals");
+                                move(1, false, invokingPlayer);
+                            } else {
+                                //System.out.println("Moving 1, ignoring portals");
+                                move(1, true, invokingPlayer);
+                            }
+                            counter--;
                         }
-                        counter--;
                     }
-                }
-            };
-            Timer timer = new Timer(500, alMv1);
-            timer.start();
-        }
-
-        /**
-         * Adds this Player to the Player Vector in the GameLogic class.
-         */
-        protected void addToPlayersVector(){
-            playerVector.add(this);
+                };
+                Timer timer = new Timer(500, alMv1);
+                timer.start();
+            }
         }
 
         /**
@@ -355,6 +398,7 @@ public class GameLogic extends JPanel implements Serializable {
     protected class BoardTile extends JPanel{
         private boolean isOrangePortal = false;
         private boolean isBluePortal = false;
+        private static final long serialVersionUID = 43L;
 
         /**
          * Returns a textual representation of the type of portal.

@@ -25,7 +25,7 @@ public class Client extends JFrame {
    private StringBuilder chatLog = new StringBuilder();
    private StringBuilder gmLog = new StringBuilder();
    private JPanel jpCenter;
-   
+
    /**
     * Default constructor for the Client class.
     * Handles GUI.
@@ -120,6 +120,31 @@ public class Client extends JFrame {
             rr = new RollRequest(alias);
             try{
                oos.writeObject(new DataWrapper(DataWrapper.RRCODE, rr));
+               oos.flush();
+
+               //Use a timer to check every 50ms  until turnFinished is true. Other implementations tend to freeze the code.
+               java.util.Timer timer = new java.util.Timer();
+               TimerTask ttQueryTurnFinished = new TimerTask() {
+                  @Override
+                  public void run() {
+                     if (glClient.getTurnFinished()) {
+                        System.out.println("Turn finished, sending control token.");
+                        try {
+                           oos.writeObject(
+                                   new DataWrapper(
+                                           DataWrapper.CTCODE, new ControlToken(ControlToken.TURNFINISHEDCODE)));
+                           oos.flush();
+                        } catch (IOException e) {
+                           e.printStackTrace();
+                        }
+                        glClient.setTurnFinished(false);
+                        timer.cancel();
+                     }
+                  }
+               };
+               timer.schedule(ttQueryTurnFinished, 0 , 50);
+
+
             } catch(NullPointerException npe) {
                System.err.println("Error: you are not connected.");
                //npe.printStackTrace();
@@ -240,9 +265,7 @@ public class Client extends JFrame {
    public void sendMessage(String message){
       try{
          oos.writeObject(new DataWrapper(DataWrapper.STRINGCODE, message, false));
-      } catch(SocketException se) {
-         System.err.println("Error: not connected. Message not sent.");
-      } catch(NullPointerException npe) {
+      } catch(SocketException | NullPointerException snpe) {
          System.err.println("Error: not connected. Message not sent.");
       } catch(IOException ioe) {
          ioe.printStackTrace();
@@ -291,17 +314,15 @@ public class Client extends JFrame {
             try{
                dw = (DataWrapper)ois.readObject();
             } catch(SocketException se) {
-               System.err.println("Connection closed. No longer recieving server output.");
+               JOptionPane.showMessageDialog(null, "Connection closed. No longer receiving server output.");
                break;
                //se.printStackTrace();
             } catch(EOFException eofe) {
-               System.err.println("Error: connection closed. No longer recieving server output.");
+               JOptionPane.showMessageDialog(null, "Connection closed. No longer receiving server output.");
                eofe.printStackTrace();
                break;
-            } catch(ClassNotFoundException cnfe) {
+            } catch(ClassNotFoundException | IOException cnfe) {
                cnfe.printStackTrace();
-            } catch(IOException ioe) {
-               ioe.printStackTrace();
             }
             switch(dw.getType()){
                //Handle incoming messages, treating chat messages and game messages differently
@@ -345,10 +366,10 @@ public class Client extends JFrame {
                      //Add the player to the starting tile if they're not already on the board
                      case ControlToken.ADDCODE:
                         if(!glClient.containsPlayer(ct.getPlayerName())) {
-                           GameLogic.Player playerLabel = glClient.new Player(ct.getPlayerName());
+                           GameLogic.Player playerToBeAdded = glClient.new Player(ct.getPlayerName(), ct.getPawnCode());
                            glClient.addToBoard(
-                                   playerLabel, glClient.getBoardSize() - 1, glClient.getBoardSize() - 1, alias);
-                           playerLabel.addToPlayersVector();
+                                   playerToBeAdded, glClient.getBoardSize() - 1, glClient.getBoardSize() - 1);
+                           glClient.addToPlayersVector(playerToBeAdded);
                         }
                         break;
 
@@ -408,6 +429,7 @@ public class Client extends JFrame {
                   break;
 
             } //end of switch statement
+
          } //end of while loop
       }  //end of run method
    } //end of ObjectListener class

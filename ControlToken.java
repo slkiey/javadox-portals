@@ -11,11 +11,13 @@ public class ControlToken implements Serializable{
     * Code to move a player: 3
     * Code to remove a player: 4
     */
-   protected static final int ENABLECODE = 0, DISABLECODE = 1, ADDCODE = 2, MOVECODE = 3, REMOVECODE = 4, BOARDREQUEST = 5;
+   protected static final int ENABLECODE = 0, DISABLECODE = 1, ADDCODE = 2, MOVECODE = 3,
+           REMOVECODE = 4, BOARDREQUEST = 5, TURNFINISHEDCODE = 6;
    private int opcode;
    private String playerName;
    private int tilesToMove;
    private boolean oneByOne;
+   private int pawnCode;
    /**
     * A constructor for the ControlToken class.
     * @param _opcode the int specifying which action should be taken.
@@ -27,6 +29,12 @@ public class ControlToken implements Serializable{
    public ControlToken(int _opcode, String name) {
       opcode = _opcode;
       playerName = name;
+   }
+
+   public ControlToken(int _opcode, String name, int _pawnCode){
+      opcode = _opcode;
+      playerName = name;
+      pawnCode = _pawnCode;
    }
 
    public ControlToken(int _opcode, String name, int _tilesToMove, boolean _oneByOne){
@@ -55,4 +63,6 @@ public class ControlToken implements Serializable{
    public boolean getOneByOne(){
       return oneByOne;
    }
+
+   public int getPawnCode() { return pawnCode; }
 }

@@ -1,6 +1,4 @@
-import java.io.*;
-import java.util.ArrayList;
-import java.util.Vector;
+import java.io.Serializable;
 
 /**
  * A wrapper class for messages/tokens to be sent.
@@ -12,6 +10,7 @@ public class DataWrapper implements Serializable{
     * Code for a ControlToken: 2
     * Code for GameLogic object: 3
     */
+   private static final long serialVersionUID = 40L;
    protected static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2, GLCODE = 3;
    private int type;
    String message;

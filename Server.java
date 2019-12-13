@@ -1,3 +1,7 @@
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -8,9 +12,12 @@ import javax.swing.*;
 
 public class Server extends JFrame{
    private Vector<ClientHandler> clientThreads = new Vector<>();
+   private Queue<String> turnQueue = new LinkedList<>();
    private static final int PORT = 4242;
    private GameLogic updatedGL;
    private final Random rand;
+   private volatile boolean turnFinished = false;
+   private StringBuilder sbCommandHistory = new StringBuilder();
 
    /**
     * The server's default constructor.
@@ -19,25 +26,72 @@ public class Server extends JFrame{
    public Server(){
       //Create a Random object
       rand = new Random();
+      //Create the GUI
+
+      //Text area for displaying console
+      JTextArea jtaCommandHistory = new JTextArea(35,45);
+      jtaCommandHistory.setFont(new Font("Helvetica", Font.BOLD, 12));
+      jtaCommandHistory.setBackground(Color.BLACK);
+      jtaCommandHistory.setForeground(Color.GREEN);
+      jtaCommandHistory.setEditable(false);
+
+      //Text field for entering commands
+      JTextField jtfConsole = new JTextField(15);
+
+      //Binding the Enter key to reset
+      jtfConsole.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "sendMessage");
+      jtfConsole.getActionMap().put("sendMessage", new AbstractAction(){
+         public void actionPerformed(ActionEvent ae){
+
+            //Store the command in history
+            sbCommandHistory.append(">>");
+            sbCommandHistory.append(jtfConsole.getText());
+            sbCommandHistory.append("\n");
+
+            //Execute the command
+            parseCommand(jtfConsole.getText());
+
+            //Reset the text field
+            jtfConsole.setText("");
+         }
+      });
+      add(jtaCommandHistory, BorderLayout.CENTER);
+      add(jtfConsole, BorderLayout.SOUTH);
+
+      //Use a Timer to set the command history area to the StringBuilder text
+      ActionListener alRefresh = new ActionListener() {
+         public void actionPerformed(ActionEvent ae) {
+            jtaCommandHistory.setText(sbCommandHistory.toString());
+         }
+      };
+      javax.swing.Timer timer = new javax.swing.Timer(350, alRefresh);
+      timer.start();
+
+      //JFrame Initialization
+      setTitle("Portals Server");
+      setVisible(true);
+      setDefaultCloseOperation(EXIT_ON_CLOSE);
+      setLocationRelativeTo(null);
+      pack();
       //Accept and handle client connections
-      try{
+      try {
          Socket cs;
          ServerSocket ss = new ServerSocket(PORT);
          //Print server information
          InetAddress ina = InetAddress.getLocalHost();
-         System.out.println("Host name: " + ina.getHostName());
-         System.out.println("IP Address: " + ina.getHostAddress());
-         new ConsoleHandler().start();
-         while(true){
+         consoleAppend("Host name: " + ina.getHostName());
+         consoleAppend("IP Address: " + ina.getHostAddress());
+         while (true) {
             cs = ss.accept();
             ClientHandler ct = new ClientHandler(cs);
             ct.start();
             clientThreads.add(ct);
          }
-      } catch(UnknownHostException uhe) {
+      } catch (UnknownHostException uhe) {
+         System.err.println("Could not determine host IP address.");
          uhe.printStackTrace();
-      } catch(IOException ioe) {
-         ioe.printStackTrace();
+      } catch (IOException uhe) {
+         uhe.printStackTrace();
       }
    } //end of Server constructor
    
@@ -100,7 +154,159 @@ public class Server extends JFrame{
          }
       }
    } //end of sendToAll method
-   
+
+   private void consoleAppend(String string){
+      sbCommandHistory.append(string);
+      sbCommandHistory.append("\n");
+   }
+
+   private void parseCommand(String consoleLine){
+      if(consoleLine.trim().equals("")) {
+         System.err.println("Blank line");
+      } else {
+         ArrayList<String> cmdSplit = new ArrayList<>();
+
+         //Split the line by spaces except between quotes and add to the cmdSplit ArrayList
+         Matcher matcher = Pattern.compile("([^\"]\\S*|\".+?\")\\s*").matcher(consoleLine);
+         while(matcher.find()) cmdSplit.add(matcher.group(1).replace("\"", ""));
+
+         //Store the first element in a String command and the second element in a String name
+         String command = cmdSplit.get(0);
+         String name = "";
+         consoleAppend("Command: " + command);
+         if(cmdSplit.size() > 1) {
+            name = cmdSplit.get(1);
+            consoleAppend("Name: " + name);
+         }
+         /* COMMANDS BELOW
+          * printnames: Prints the current list of clients
+          *
+          * search name: Searches for the client in the Vector and prints a String
+          *
+          * enable name: If the player is in the Vector, sends a ControlToken telling
+          * them to enable their button.
+          *
+          * disable name: If the player is in the Vector, sends a ControlToken telling
+          * them to disable their button.
+          *
+          * kick name: Close the socket for this player.
+          *
+          * move name <int> <obo>: Move the player a number of spaces. Include obo if you want the
+          * player to move one tile at a time.
+          */
+
+         switch(command){
+            //Prints the current list of clients
+            case "printnames":
+               if(clientThreads.size() == 0){
+                  consoleAppend("No clients are connected.");
+               }
+               StringBuilder sbClientList = new StringBuilder();
+               for(ClientHandler ch:clientThreads){
+                  sbClientList.append(String.format("Index: %-3d | Name: \"%s\"\n", clientThreads.indexOf(ch), ch.getName()));
+               }
+               consoleAppend(sbClientList.toString());
+               break;
+
+            //Gets an updated board
+            case "getboard":
+               requestBoard();
+               break;
+
+            //Displays the updated board in a new window
+            case "showboard":
+               if(updatedGL != null) {
+                  JFrame jfBoard = new JFrame();
+                  jfBoard.setTitle("Current Board");
+                  jfBoard.add(updatedGL, BorderLayout.CENTER);
+                  jfBoard.pack();
+                  jfBoard.setVisible(true);
+                  jfBoard.setDefaultCloseOperation(EXIT_ON_CLOSE);
+               } else {
+                  consoleAppend("Board doesn't exist.");
+               }
+               break;
+
+            //Searches for a client in the Vector
+            case "search":
+               consoleAppend(searchClients(name));
+               break;
+
+            //Starts the game
+            case "startgame":
+               if(clientThreads.size() == 0){
+                  consoleAppend("Can't start the game, no players are connected.");
+               } else {
+                  consoleAppend("Starting game..");
+                  TurnHandler th = new TurnHandler();
+                  th.start();
+               }
+               break;
+
+            //Enables roll for a player
+            case "enable":
+               if(getIndex(name) != -1){
+                  consoleAppend(String.format("Attempting to enable %s's button...\n", name));
+                  clientThreads.get(getIndex(name)).enableClient();
+               } else {
+                  consoleAppend(String.format("Could not enable button, client %s not found.\n", name));
+               }
+               break;
+
+            //Disables roll for a player
+            case "disable":
+               if(getIndex(name) != -1){
+                  consoleAppend(String.format("Attempting to disable %s's button...\n", name));
+                  clientThreads.get(getIndex(name)).disableClient();
+               } else {
+                  consoleAppend(String.format("Could not disable button, client %s not found.\n", name));
+               }
+               break;
+            //Kick a player.
+            case "kick":
+               if(getIndex(name) != -1){
+                  consoleAppend(String.format("Attempting to kick %s...\n", name));
+                  try{
+                     clientThreads.get(getIndex(name)).mySocket.close();
+                  } catch(IOException ioe) {
+                     consoleAppend("Error: couldn't kick " + name);
+                     ioe.printStackTrace();
+                  }
+               } else {
+                  consoleAppend(String.format("Could not kick client %s, client %s not connected.\n", name, name));
+               }
+               break;
+
+            //Move a player a number of tiles on all boards
+            case "move":
+               if (getIndex(name) != -1) {
+                  try {
+                     int tilesToMove = Integer.parseInt(cmdSplit.get(2));
+                     boolean oBo = false;
+                     if (cmdSplit.size() >= 4) {
+                        String oneByOne = cmdSplit.get(3);
+                        if (oneByOne.equals("obo")) {
+                           oBo = true;
+                        }
+                     }
+                     sendCTToAll(new ControlToken(
+                             ControlToken.MOVECODE, name, tilesToMove, oBo));
+                  } catch (NumberFormatException nfe) {
+                     System.err.println("Invalid number of moves, please enter an integer.");
+                  }
+               } else {
+                  System.err.printf("Could not move client %s, client %s not connected.\n", name, name);
+               }
+               break;
+
+            default:
+               consoleAppend("Command not recognized.");
+               break;
+
+         }
+      }
+   }
+
    /**
     * Searches the clientThreads vector for a client name.
     * @param client the name of the client
@@ -175,7 +381,7 @@ public class Server extends JFrame{
                   if(dw.getType() == DataWrapper.STRINGCODE){
                      line = dw.getMessage();
                   }
-                  System.out.println(line);
+                  consoleAppend(line);
 
                   /*
                    * Extract the alias from the String by getting the substring from 0 to the last index of whitespace,
@@ -193,10 +399,11 @@ public class Server extends JFrame{
                   }
 
                   this.setName(alias);
+                  turnQueue.add(alias);
                   nameGet = true;
 
-                  //Tell all clients to add the new client to the board
-                  sendCTToAll(new ControlToken(ControlToken.ADDCODE, alias));
+                  //Instruct all clients to add the new player
+                  sendCTToAll(new ControlToken(ControlToken.ADDCODE, alias, rand.nextInt(8)));
 
                   /*
                    * For all players other than the first, request an updated board from the first Client in the Vector
@@ -229,7 +436,7 @@ public class Server extends JFrame{
                      //Send client messages to all clients, appending sender name
                      String fmtMessage = String.format("%s: %s", this.getName(), dw.getMessage());
                      sendToAll(fmtMessage);
-                     System.out.println(fmtMessage);
+                     consoleAppend(fmtMessage);
                      break;
 
                   //Handle RollRequest objects
@@ -242,27 +449,32 @@ public class Server extends JFrame{
                      //Move the player on all the boards by writing a ControlToken with the rolledResult
                      sendCTToAll(new ControlToken(
                              ControlToken.MOVECODE, this.getName(), rolledResult, true));
-                     System.out.println(fmtRR);
+                     consoleAppend(fmtRR);
                      break;
 
                   //Store the updated board in a variable to be sent to connecting players
                   case DataWrapper.GLCODE:
                      updatedGL = dw.getGL();
-                     System.out.printf("Received a GameLogic with %d players.\n", dw.getGL().getPlayerVector().size());
-                     System.out.println(updatedGL.toString());
+                     consoleAppend(String.format("Received a GameLogic with %d players.\n", dw.getGL().getPlayerVector().size()));
+                     consoleAppend(updatedGL.toString());
+                     break;
+
+                  case DataWrapper.CTCODE:
+                     if(dw.getCT().getCode() == ControlToken.TURNFINISHEDCODE){
+//                        consoleAppend("Token received, setting turnFinished to true..");
+                        turnFinished = true;
+                     }
                      break;
 
                   //Default case
                   default:
-                     System.err.println("Error: invalid DataWrapper.type");
+                     consoleAppend("Error: invalid DataWrapper.type");
                      break;
                } //end of switch statement
             } //end of while loop
          } catch(ClassNotFoundException cnfe) {
             System.err.println("Error: class not found " + cnfe.getMessage());
-         } catch(SocketException se) {
-            handleDisconnect();
-         } catch(EOFException eofe) {
+         } catch(SocketException | EOFException se) {
             handleDisconnect();
          } catch(IOException ioe) {
             ioe.printStackTrace();
@@ -275,7 +487,7 @@ public class Server extends JFrame{
        * and tells them remove them from their board.
        */
       public void handleDisconnect(){
-         System.err.println(this.getName() + " disconnected.");
+         consoleAppend(this.getName() + " disconnected.");
          clientThreads.remove(getIndex(this.getName()));
          sendToAll(this.getName() + " disconnected.");
          sendCTToAll(new ControlToken(ControlToken.REMOVECODE, this.getName()));
@@ -322,137 +534,37 @@ public class Server extends JFrame{
       public ObjectOutputStream getOOS(){
          return oos;
       }
-      
+
    } //end of ClientHandler class
-   
-   //Thread class for server console
-   protected class ConsoleHandler extends Thread{
-      private Scanner scan;
-      
-      /**
-       * Default constructor for the ConsoleHandler class.
-       * Creates a scanner to read from console.
-       */
-      public ConsoleHandler(){
-         scan = new Scanner(System.in);
-      }
-      
-      /**
-       * Run method for the ConsoleHandler class.
-       * Processes commands from the console.
-       */
+
+   protected class TurnHandler extends Thread{
+
+      public TurnHandler(){}
+
       public void run(){
-         System.out.println("Console started");
          while(true){
-            String consoleLine = scan.nextLine();
-            if(consoleLine.trim().equals("")) {
-               System.err.println("Blank line");
-               continue;
-            }
-            ArrayList<String> cmdSplit = new ArrayList<>();
+            String currentPlayer = turnQueue.peek();
+            ClientHandler chPlayer;
 
-            //Split the line by spaces except between quotes and add to the cmdSplit ArrayList
-            Matcher matcher = Pattern.compile("([^\"]\\S*|\".+?\")\\s*").matcher(consoleLine);
-            while(matcher.find()) cmdSplit.add(matcher.group(1).replace("\"", ""));
+            sendGMToAll(String.format("It is now %s's turn.", currentPlayer));
+            chPlayer = clientThreads.get(getIndex(currentPlayer));
+            chPlayer.enableClient();
 
-            //Store the first element in a String command and the second element in a String name
-            String command = cmdSplit.get(0);
-            String name = "";
-            System.out.println("Command: " + command);
-            if(cmdSplit.size() > 1) {
-               name = cmdSplit.get(1);
-               System.out.println("Name: " + name);
-            }
-            /* COMMANDS BELOW
-             * printnames: Prints the current list of clients
-             *
-             * search name: Searches for the client in the Vector and prints a String
-             *
-             * enable name: If the player is in the Vector, sends a ControlToken telling
-             * them to enable their button.
-             *
-             * disable name: If the player is in the Vector, sends a ControlToken telling
-             * them to disable their button.
-             *
-             * kick name: Close the socket for this player.
-             *
-             * move name <int> <obo>: Move the player a number of spaces. Include obo if you want the
-             * player to move one tile at a time.
-             */
-            
-            //Prints the current list of clients
-            if(consoleLine.equals("printnames")){
-               if(clientThreads.size() == 0){
-                  System.out.println("No clients are connected.");
-               }
-               for(ClientHandler ch:clientThreads){
-                  System.out.printf("Index: %-3d | Name: \"%s\"\n", clientThreads.indexOf(ch), ch.getName());
-               }
-            }
-            
-            //Searches for a client in the Vector
-            if(command.equals("search")){
-               System.out.print(searchClients(name));
-            }
-            
-            //Enable roll for a player
-            if(command.equals("enable")){
-               if(getIndex(name) != -1){
-                  System.out.printf("Attempting to enable %s's button...\n", name);
-                  clientThreads.get(getIndex(name)).enableClient();
-               } else {
-                  System.err.printf("Could not enable button, client %s not found.\n", name);
-               }
-            }
-            
-            //Disable roll for a player
-            if(command.equals("disable")){
-               if(getIndex(name) != -1){
-                  System.out.printf("Attempting to disable %s's button...\n", name);
-                  clientThreads.get(getIndex(name)).disableClient();
-               } else {
-                  System.err.printf("Could not disable button, client %s not found.\n", name);
-               }
-            }
-            
-            //Kick a player.
-            if(command.equals("kick")){
-               if(getIndex(name) != -1){
-                  System.out.printf("Attempting to kick %s...\n", name);
-                  try{
-                     clientThreads.get(getIndex(name)).mySocket.close();
-                  } catch(IOException ioe) {
-                     System.err.println("Error: couldn't kick " + name);
-                     ioe.printStackTrace();
-                  }
-               } else {
-                  System.err.printf("Could not kick client %s, client %s not connected.\n", name, name);
+            while(true){
+//               System.out.println("Waiting for player to finish turn..");
+               if(turnFinished) {
+                  chPlayer.disableClient();
+                  //Resetting the turnFinished variable for the next turn
+                  turnFinished = false;
+                  break;
                }
             }
 
-            //Move a player a number of tiles on all boards
-            if(command.equals("move")) {
-               if(getIndex(name) != -1) {
-                  try {
-                     int tilesToMove = Integer.parseInt(cmdSplit.get(2));
-                     boolean oBo = false;
-                     if(cmdSplit.size() >= 4) {
-                        String oneByOne = cmdSplit.get(3);
-                        if (oneByOne.equals("obo")) {
-                           oBo = true;
-                        }
-                     }
-                     sendCTToAll(new ControlToken(
-                             ControlToken.MOVECODE, name, tilesToMove, oBo));
-                  } catch (NumberFormatException nfe) {
-                     System.err.println("Invalid number of moves, please enter an integer.");
-                  }
-               } else {
-                  System.err.printf("Could not move client %s, client %s not connected.\n", name, name);
-               }
-            }
+            turnQueue.remove();
+            sendGMToAll(String.format("%s has finished their turn.", currentPlayer));
+            turnQueue.add(currentPlayer);
+         }
+      }
+   }
 
-         } //end of while loop
-      } //end of run method
-   } //end of ConsoleHandler class
 } //end of Server class
