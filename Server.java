@@ -5,35 +5,44 @@ import java.awt.event.KeyEvent;
 import java.io.*;
 import java.net.*;
 import java.util.*;
-import java.util.Timer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.*;
-
+/**
+ * The server class for the Portals game.
+ * Team Javadox
+ * @author Alan Chu
+ * @version 20191218
+ */
 public class Server extends JFrame{
    private Vector<ClientHandler> clientThreads = new Vector<>();
-   private Queue<String> turnQueue = new LinkedList<>();
    private static final int PORT = 4242;
-   private GameLogic updatedGL;
+   private GameLogic.BoardInformation boardLayout;
    private final Random rand;
    private volatile boolean turnFinished = false;
    private StringBuilder sbCommandHistory = new StringBuilder();
+   private Queue<String> turnQueue = new LinkedList<>();
+   private final Object waitForBoardLock = new Object();
+   private final Object turnFinishedLock = new Object();
+   private boolean boardUpdated = false;
 
    /**
-    * The server's default constructor.
+    * Constructs a command line to control the game from.
     * Accepts client connections.
     */
    public Server(){
       //Create a Random object
       rand = new Random();
-      //Create the GUI
 
+      //Create the GUI
       //Text area for displaying console
       JTextArea jtaCommandHistory = new JTextArea(35,45);
       jtaCommandHistory.setFont(new Font("Helvetica", Font.BOLD, 12));
       jtaCommandHistory.setBackground(Color.BLACK);
       jtaCommandHistory.setForeground(Color.GREEN);
       jtaCommandHistory.setEditable(false);
+      //Wrap the text area in a JScrollPane
+      JScrollPane jspCommandHistory = new JScrollPane(jtaCommandHistory);
 
       //Text field for entering commands
       JTextField jtfConsole = new JTextField(15);
@@ -44,6 +53,7 @@ public class Server extends JFrame{
          public void actionPerformed(ActionEvent ae){
 
             //Store the command in history
+            sbCommandHistory.append("\n");
             sbCommandHistory.append(">>");
             sbCommandHistory.append(jtfConsole.getText());
             sbCommandHistory.append("\n");
@@ -55,7 +65,7 @@ public class Server extends JFrame{
             jtfConsole.setText("");
          }
       });
-      add(jtaCommandHistory, BorderLayout.CENTER);
+      add(jspCommandHistory, BorderLayout.CENTER);
       add(jtfConsole, BorderLayout.SOUTH);
 
       //Use a Timer to set the command history area to the StringBuilder text
@@ -73,6 +83,11 @@ public class Server extends JFrame{
       setDefaultCloseOperation(EXIT_ON_CLOSE);
       setLocationRelativeTo(null);
       pack();
+
+      //Creating a GameLogic to serve as the portal layout
+      GameLogic glLayout = new GameLogic(10, true);
+      boardLayout = glLayout.getUpdatedBoardInformation();
+
       //Accept and handle client connections
       try {
          Socket cs;
@@ -137,6 +152,7 @@ public class Server extends JFrame{
          }
       }
    }
+
   /**
     * Prints a GameMessage string to all clients in the clientThreads vector.
     * @param msg the message to be sent
@@ -155,11 +171,19 @@ public class Server extends JFrame{
       }
    } //end of sendToAll method
 
+   /**
+    * Append a String to the command
+    * @param string
+    */
    private void consoleAppend(String string){
       sbCommandHistory.append(string);
       sbCommandHistory.append("\n");
    }
 
+   /**
+    * Takes a String and performs a corresponding action.
+    * @param consoleLine the command from the console
+    */
    private void parseCommand(String consoleLine){
       if(consoleLine.trim().equals("")) {
          System.err.println("Blank line");
@@ -213,19 +237,19 @@ public class Server extends JFrame{
                requestBoard();
                break;
 
-            //Displays the updated board in a new window
-            case "showboard":
-               if(updatedGL != null) {
-                  JFrame jfBoard = new JFrame();
-                  jfBoard.setTitle("Current Board");
-                  jfBoard.add(updatedGL, BorderLayout.CENTER);
-                  jfBoard.pack();
-                  jfBoard.setVisible(true);
-                  jfBoard.setDefaultCloseOperation(EXIT_ON_CLOSE);
-               } else {
-                  consoleAppend("Board doesn't exist.");
-               }
-               break;
+//            //Displays the updated board in a new window
+//            case "showboard":
+//               if(updatedGL != null) {
+//                  JFrame jfBoard = new JFrame();
+//                  jfBoard.setTitle("Current Board");
+//                  jfBoard.add(updatedGL, BorderLayout.CENTER);
+//                  jfBoard.pack();
+//                  jfBoard.setVisible(true);
+//                  jfBoard.setDefaultCloseOperation(EXIT_ON_CLOSE);
+//               } else {
+//                  consoleAppend("Board doesn't exist.");
+//               }
+//               break;
 
             //Searches for a client in the Vector
             case "search":
@@ -402,67 +426,71 @@ public class Server extends JFrame{
                   turnQueue.add(alias);
                   nameGet = true;
 
+                  //If the first client
+                  if(clientThreads.get(0) == this) {
+                     //send the boardLayout for them to unpack
+                     oos.writeObject(new DataWrapper(DataWrapper.BICODE, boardLayout));
+                  }
+                  //If not the first client
+                  if(clientThreads.get(0) != this) {
+                     //request a board from the first client and wait until the updated board is received
+                     requestBoard();
+                     synchronized (waitForBoardLock) {
+                        while (!boardUpdated) {
+//                           System.out.println("Thread " + this.getName() + " waiting");
+                           waitForBoardLock.wait();
+                        }
+                     }
+                     oos.writeObject(new DataWrapper(DataWrapper.BICODE, boardLayout));
+                     boardUpdated = false;
+                  }
+
                   //Instruct all clients to add the new player
                   sendCTToAll(new ControlToken(ControlToken.ADDCODE, alias, rand.nextInt(8)));
-
-                  /*
-                   * For all players other than the first, request an updated board from the first Client in the Vector
-                   * and send it players when the first connect.
-                   */
-                  if(clientThreads.get(0) != this) {
-                     //Retrieve an updated board from a player and send it to this client
-                     requestBoard();
-                     //Wait 1250 milliseconds before writing updatedGL. The Client will send an updated board in this time.
-                     Timer timer = new Timer();
-                     TimerTask ttWriteBoard = new TimerTask() {
-                        @Override
-                        public void run() {
-                           try {
-                              oos.writeObject(new DataWrapper(DataWrapper.GLCODE, updatedGL));
-                              oos.flush();
-                           } catch (IOException ioe) {
-                              ioe.printStackTrace();
-                           }
-                        }
-                     };
-                     timer.schedule(ttWriteBoard, 1250);
-                  }
 
                }
                //Handle DataWrapper objects
                switch(dw.getType()){
-                  //Handle chat messages
+                  //Ensure all clients see each others' messages
                   case DataWrapper.STRINGCODE:
-                     //Send client messages to all clients, appending sender name
+                     //Send incoming client chat messages to all clients, and append sender name
                      String fmtMessage = String.format("%s: %s", this.getName(), dw.getMessage());
                      sendToAll(fmtMessage);
                      consoleAppend(fmtMessage);
                      break;
 
-                  //Handle RollRequest objects
-                  case DataWrapper.RRCODE:
-                     RollRequest srr = dw.getRR();
-                     //Obtain the roll result and send it to all clients.
-                     int rolledResult = rollResult();
-                     String fmtRR = String.format("%s rolled a %d!", srr.getSender(), rolledResult);
-                     sendGMToAll(fmtRR);
-                     //Move the player on all the boards by writing a ControlToken with the rolledResult
-                     sendCTToAll(new ControlToken(
-                             ControlToken.MOVECODE, this.getName(), rolledResult, true));
-                     consoleAppend(fmtRR);
+                  //Receive updated board information from the first client in the client list
+                  case DataWrapper.BICODE:
+                     boardLayout = dw.getBoardInformation();
+                     System.out.println("Received an updated BoardInformation.");
+                     System.out.println(boardLayout.toString());
+                     synchronized(waitForBoardLock){
+                        boardUpdated = true;
+                        waitForBoardLock.notify();
+//                        System.out.println("Thread " + this.getName() + " notified because of receiving a BoardInformation.");
+                     }
                      break;
 
-                  //Store the updated board in a variable to be sent to connecting players
-                  case DataWrapper.GLCODE:
-                     updatedGL = dw.getGL();
-                     consoleAppend(String.format("Received a GameLogic with %d players.\n", dw.getGL().getPlayerVector().size()));
-                     consoleAppend(updatedGL.toString());
-                     break;
-
+                  //Handle ControlToken objects
                   case DataWrapper.CTCODE:
+                     //Client informs server that they are finished with their turn
                      if(dw.getCT().getCode() == ControlToken.TURNFINISHEDCODE){
-//                        consoleAppend("Token received, setting turnFinished to true..");
-                        turnFinished = true;
+                        synchronized(turnFinishedLock) {
+                           turnFinished = true;
+                           turnFinishedLock.notify();
+                        }
+//                        System.out.println("Thread " + this.getName() + " notified because of receiving a turnFinished.");
+                     }
+                     //Client asks to roll the dice, Server returns a random value from 1-6
+                     if(dw.getCT().getCode() == ControlToken.ROLLREQUESTCODE) {
+                        //Generate the roll result
+                        int rolledResult = rollResult();
+                        //Send it as a game message to all clients
+                        String rolledResultString = String.format("%s rolled a %d!",
+                                dw.getCT().getPlayerName(), rolledResult);
+                        sendGMToAll(rolledResultString);
+                        //Instruct the clients to move the player on all boards
+                        sendCTToAll(new ControlToken(ControlToken.MOVECODE, this.getName(), rolledResult, true));
                      }
                      break;
 
@@ -477,6 +505,8 @@ public class Server extends JFrame{
          } catch(SocketException | EOFException se) {
             handleDisconnect();
          } catch(IOException ioe) {
+            ioe.printStackTrace();
+         } catch (InterruptedException ioe) {
             ioe.printStackTrace();
          }
       } //end of run method
@@ -539,9 +569,12 @@ public class Server extends JFrame{
 
    protected class TurnHandler extends Thread{
 
-      public TurnHandler(){}
+      public TurnHandler(){
+         setName("TurnHandler");
+      }
 
       public void run(){
+
          while(true){
             String currentPlayer = turnQueue.peek();
             ClientHandler chPlayer;
@@ -550,19 +583,24 @@ public class Server extends JFrame{
             chPlayer = clientThreads.get(getIndex(currentPlayer));
             chPlayer.enableClient();
 
-            while(true){
-//               System.out.println("Waiting for player to finish turn..");
-               if(turnFinished) {
-                  chPlayer.disableClient();
-                  //Resetting the turnFinished variable for the next turn
-                  turnFinished = false;
-                  break;
+            synchronized (turnFinishedLock) {
+               while (!turnFinished) {
+//                     System.out.println("Thread " + this.getName() + " waiting for a TurnFinished token..");
+                  try {
+                     turnFinishedLock.wait();
+                  } catch (InterruptedException ioe) {
+                     ioe.printStackTrace();
+                  }
                }
+               chPlayer.disableClient();
+               turnFinished = false; //resetting turnFinished
             }
+
 
             turnQueue.remove();
             sendGMToAll(String.format("%s has finished their turn.", currentPlayer));
             turnQueue.add(currentPlayer);
+
          }
       }
    }

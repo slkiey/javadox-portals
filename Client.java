@@ -1,23 +1,32 @@
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.awt.event.*;
-import java.awt.BorderLayout;
-import java.awt.Color;
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.Timer;
 import javax.swing.text.JTextComponent;
 import javax.swing.border.EmptyBorder;
+import javax.swing.text.DefaultCaret;
 
+/**
+ * The client class for the Portals game.
+ * Team Javadox
+ * @author Alan Chu
+ * @version 20191218
+ */
 public class Client extends JFrame {
    private final int PORT = 4242;
+   private final int BOARD_SIZE = 10;
    private GameLogic glClient;
    private String ip;
    private String alias;
    private ObjectInputStream ois;
    private ObjectOutputStream oos;
    private Socket sock;
-   private RollRequest rr;
+   private JFrame jfMainMenu;
    private JTextField jtfAlias;
    private JTextArea jtaDisplayMsgs;
    private JTextArea jtaDisplayGM;
@@ -25,12 +34,100 @@ public class Client extends JFrame {
    private StringBuilder chatLog = new StringBuilder();
    private StringBuilder gmLog = new StringBuilder();
    private JPanel jpCenter;
+   private final String portalLogoPath = "media/portalsLogo.png";
 
    /**
     * Default constructor for the Client class.
-    * Handles GUI.
+    * Creates the main menu GUI.
     */
    public Client(){
+      //Initialize variables
+      ActionListener alMainMenu;
+      JButton jbPlay;
+      JButton jbHelp;
+      JButton jbExit;
+
+      //Create main menu GUI
+      jfMainMenu = new JFrame();
+      JPanel jpMainMenu = new JPanel();
+      jpMainMenu.setPreferredSize(new Dimension(500, 750));
+      jpMainMenu.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+      JLabel jlPortalsLogo = new JLabel("", SwingConstants.CENTER);
+      //Load the portal image and set the label's icon to it
+      BufferedImage biPortalsLogo = null;
+      ImageIcon iiPortalsLogo;
+      try {
+         biPortalsLogo = ImageIO.read(getClass().getResourceAsStream(portalLogoPath));
+      } catch (IOException ioe) {
+         ioe.printStackTrace();
+      }
+      iiPortalsLogo = new ImageIcon(biPortalsLogo);
+      jlPortalsLogo.setIcon(iiPortalsLogo);
+
+
+      //Create buttons and configure their properties
+      Dimension buttonDimension = new Dimension(250, 150);
+      jbPlay = new JButton("PLAY");
+      jbPlay.setFont(new Font("Verdana", Font.BOLD, 35));
+      jbPlay.setPreferredSize(buttonDimension);
+
+      jbHelp = new JButton("HELP");
+      jbHelp.setFont(new Font("Verdana", Font.BOLD, 35));
+      jbHelp.setPreferredSize(buttonDimension);
+
+      jbExit = new JButton("EXIT");
+      jbExit.setFont(new Font("Verdana", Font.BOLD, 35));
+      jbExit.setPreferredSize(buttonDimension);
+
+      jpMainMenu.add(jlPortalsLogo);
+      jpMainMenu.add(jbPlay);
+      jpMainMenu.add(jbHelp);
+      jpMainMenu.add(jbExit);
+      //Create ActionListener
+      alMainMenu = new ActionListener() {
+         @Override
+         public void actionPerformed(ActionEvent ae) {
+            Object eoSource = ae.getSource();
+            if(eoSource == jbPlay){
+               jfMainMenu.dispose();
+               createGameGUI();
+            }
+            if(eoSource == jbHelp){
+               createHelpGUI();
+            }
+            if(eoSource == jbExit){
+               System.exit(0);
+            }
+
+         }
+      };
+      //Add the actionListener
+      jbPlay.addActionListener(alMainMenu); jbHelp.addActionListener(alMainMenu); jbExit.addActionListener(alMainMenu);
+      //Add the JPanel to the JFrame
+      jfMainMenu.add(jpMainMenu);
+
+      //Initialize the JFrame
+      jfMainMenu.pack();
+      jfMainMenu.setTitle("Portals Main Menu");
+      jfMainMenu.setDefaultCloseOperation(EXIT_ON_CLOSE);
+      jfMainMenu.setVisible(true);
+      jfMainMenu.setLocationRelativeTo(null);
+   }
+   
+   /**
+    * The main method.
+    * @param args arguments from the command line
+    */
+   public static void main(String[] args){
+      new Client();
+   }
+
+   /**
+    * Create the Portals board GUI.
+    * This is where the actual game is played.
+    */
+   public void createGameGUI(){
+      JFrame gameGUI = new JFrame();
       //NORTH Panel: Alias, Roll Dice, IP, Connect, Disconnect
       JPanel jpNorth = new JPanel();
       //Creating the alias text field
@@ -58,7 +155,7 @@ public class Client extends JFrame {
                System.out.println("Disconnecting..");
                System.out.println("Clearing the board and vector of " + glClient.getPlayerVector().size() + " players.");
                clearBoard();
-               glClient = new GameLogic(5);
+               glClient = new GameLogic(BOARD_SIZE, false);
                addBoard(glClient);
                sock.close();
                jbDisconnect.setEnabled(false);
@@ -81,7 +178,7 @@ public class Client extends JFrame {
                if(alias.length() > 15) {
                   System.out.println("Please enter a name less than or equal to 15 characters long.");
                }
-               if(ip.equals("Enter IP Address")) {
+               else if(ip.equals("Enter IP Address")) {
                   System.out.println("Please enter an IP address.");
                }
                else {
@@ -111,22 +208,24 @@ public class Client extends JFrame {
       //Creating the roll button
       jbRoll = new JButton("Roll Dice");
       jbRoll.addActionListener(new ActionListener() {
-         
+
          /**
           * Sends a RollRequest to the server if the button is
           * pressed.
           */
          public void actionPerformed(ActionEvent ae){
-            rr = new RollRequest(alias);
             try{
-               oos.writeObject(new DataWrapper(DataWrapper.RRCODE, rr));
+               oos.writeObject(new DataWrapper(DataWrapper.CTCODE, new ControlToken(ControlToken.ROLLREQUESTCODE, alias)));
                oos.flush();
 
+               jbRoll.setEnabled(false);
                //Use a timer to check every 50ms  until turnFinished is true. Other implementations tend to freeze the code.
+               glClient.resetTurnFinished();
                java.util.Timer timer = new java.util.Timer();
                TimerTask ttQueryTurnFinished = new TimerTask() {
                   @Override
                   public void run() {
+                     System.out.println("turnFinished boolean: " + glClient.getTurnFinished());
                      if (glClient.getTurnFinished()) {
                         System.out.println("Turn finished, sending control token.");
                         try {
@@ -137,7 +236,6 @@ public class Client extends JFrame {
                         } catch (IOException e) {
                            e.printStackTrace();
                         }
-                        glClient.setTurnFinished(false);
                         timer.cancel();
                      }
                   }
@@ -150,13 +248,11 @@ public class Client extends JFrame {
                //npe.printStackTrace();
             } catch(IOException ioe) {
                System.err.println("Error: IOException: " + ioe.getMessage());
-            } finally {
-               //jbRoll.setEnabled(false);
             }
          }
       });
       jbRoll.setEnabled(false);
-      
+
       //WEST Panel: Display Incoming Messages and Send Messages
       JPanel jpWest = new JPanel(new BorderLayout(5, 5));
       //Create the JTextArea for displaying messages. Include a border and enable word wrapping
@@ -164,12 +260,12 @@ public class Client extends JFrame {
       jtaDisplayMsgs.setLineWrap(true);
       jtaDisplayMsgs.setWrapStyleWord(true);
       jtaDisplayMsgs.setBorder(BorderFactory.createCompoundBorder
-                              (BorderFactory.createRaisedBevelBorder(), 
-                               BorderFactory.createLoweredBevelBorder())); 
+              (BorderFactory.createRaisedBevelBorder(),
+                      BorderFactory.createLoweredBevelBorder()));
       //Create the JScrollPanel to house the JTextArea for messages
-      JScrollPane jspScroll = new JScrollPane(jtaDisplayMsgs, 
-                                              ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, 
-                                              ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+      JScrollPane jspScroll = new JScrollPane(jtaDisplayMsgs,
+              ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+              ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
       jtaDisplayMsgs.setEditable(false);
       //Creating the JTextField for sending messages
       JTextField jtfSendMsgs = new JTextField(15);
@@ -182,7 +278,7 @@ public class Client extends JFrame {
             jtfSendMsgs.setText("");
          }
       });
-      
+
       //EAST Panel: Incoming game messages from Server
       JPanel jpEast = new JPanel(new BorderLayout(5,5));
       //Create a JLabel to differentiate game messages from chat messages
@@ -191,20 +287,22 @@ public class Client extends JFrame {
       jlPlayerMoves.setBackground(new Color(255,155,255));
       jlPlayerMoves.setOpaque(true);
       jlPlayerMoves.setBorder(BorderFactory.createCompoundBorder
-                             (BorderFactory.createRaisedBevelBorder(), 
-                              BorderFactory.createLoweredBevelBorder())); 
+              (BorderFactory.createRaisedBevelBorder(),
+                      BorderFactory.createLoweredBevelBorder()));
       //Create the JTextArea for displaying game messages. Include a border and enable word wrapping.
       jtaDisplayGM = new JTextArea(0, 15);
       jtaDisplayGM.setLineWrap(true);
       jtaDisplayGM.setWrapStyleWord(true);
       jtaDisplayGM.setBorder(BorderFactory.createCompoundBorder
-                            (BorderFactory.createRaisedBevelBorder(), 
-                             BorderFactory.createLoweredBevelBorder()));
+              (BorderFactory.createRaisedBevelBorder(),
+                      BorderFactory.createLoweredBevelBorder()));
       jtaDisplayGM.setEditable(false);
+      DefaultCaret caret = (DefaultCaret)jtaDisplayGM.getCaret();
+      caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
       //Create the JScrollPanel to house the JTextArea for game messages
-      JScrollPane jspScrollGM = new JScrollPane(jtaDisplayGM, 
-                                                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, 
-                                                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+      JScrollPane jspScrollGM = new JScrollPane(jtaDisplayGM,
+              ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+              ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
       //CENTER Panel: Container for the board, helps with sizing
       jpCenter = new JPanel();
@@ -219,23 +317,23 @@ public class Client extends JFrame {
       jpWest.add(jtfSendMsgs, BorderLayout.SOUTH);
       jpEast.add(jlPlayerMoves, BorderLayout.NORTH);
       jpEast.add(jspScrollGM, BorderLayout.CENTER);
-      jpCenter.add(glClient = new GameLogic(5));
+      jpCenter.add(glClient = new GameLogic(BOARD_SIZE, false));
 
       //Add padding to make West and East regions prettier
       jpWest.setBorder(new EmptyBorder(0, 10, 5, 10));
       jpEast.setBorder(new EmptyBorder(0, 10, 30, 10));
 
       //Adding the North, West, and East panels to the JFrame
-      add(jpNorth, BorderLayout.NORTH);
-      add(jpWest, BorderLayout.WEST);
-      add(jpEast,BorderLayout.EAST);
-      add(jpCenter, BorderLayout.CENTER);
+      gameGUI.add(jpNorth, BorderLayout.NORTH);
+      gameGUI.add(jpWest, BorderLayout.WEST);
+      gameGUI.add(jpEast,BorderLayout.EAST);
+      gameGUI.add(jpCenter, BorderLayout.CENTER);
 
       //Use a Timer to repaint and re-validate every 30 milliseconds (could also do this in the addToBoard method)
       ActionListener alRefresh = new ActionListener() {
          public void actionPerformed(ActionEvent ae) {
-            repaint();
-            revalidate();
+            gameGUI.repaint();
+            gameGUI.revalidate();
          }
       };
       Timer timer = new Timer(30, alRefresh);
@@ -243,20 +341,49 @@ public class Client extends JFrame {
 
       //Initialize the JFrame
 //      pack();
-      setSize(1350, 900);
-      setDefaultCloseOperation(EXIT_ON_CLOSE);
-      setVisible(true);
-      setLocationRelativeTo(null);
+      gameGUI.setSize(1350, 900);
+      gameGUI.setDefaultCloseOperation(EXIT_ON_CLOSE);
+      gameGUI.setVisible(true);
+      gameGUI.setLocationRelativeTo(null);
    }
-   
+
    /**
-    * The main method.
-    * @param args arguments from the command line
+    * Create a new window where the game's instructions are displayed.
     */
-   public static void main(String[] args){
-      new Client();
+   public void createHelpGUI(){
+      JFrame jfHelp = new JFrame("Help Page");
+      JTextArea jtaHelp = new JTextArea();
+      jtaHelp.setFont(new Font("Verdana", Font.PLAIN, 14));
+      jtaHelp.setEditable(false);
+      jtaHelp.setText(String.format("--- HOW TO PLAY ---\n" +
+              "1. The host will start the server on their machine and gives the \n" +
+              "   other players the IP to connect with.\n" +
+              "   \n" +
+              "2. Players launch their clients, enter the server IP, and type their desired alias.\n" +
+              "\n" +
+              "3. After all players have connected, the host can start the game via the \"startgame\" command,\n" +
+              "   which will create and begin the dice rolling queue.\n" +
+              "   \n" +
+              "4. When it is a player's turn (they will know because their \"Roll Die\" button will be enabled) \n" +
+              "   they can click the button to roll a random number. This number will then move the player \n" +
+              "   that many spaces forward.\n" +
+              "   \n" +
+              "5. If a player lands on a portal, that player will either teleport backwards to the \n" +
+              "   previous orange portal (if there are any) or forwards to the next blue portal.\n" +
+              "   \n" +
+              "6. The first player to reach the end of the board wins!\n" +
+              "\n" +
+              "7. If you want to play again, simply repeat steps 1-6.\n" +
+              "\n" +
+              "Author: Kenny Scott\n" +
+              "Revised by Alan Chu"));
+      jfHelp.add(jtaHelp);
+      //Initialize JFrame
+      jfHelp.pack();
+      jfHelp.setVisible(true);
+      jfHelp.setDefaultCloseOperation(DISPOSE_ON_CLOSE);
    }
-   
+
    /**
     * Sends a message via ObjectOutputStream.
     * Creates a DataWrapper with the String code: 0 and the message.
@@ -273,11 +400,12 @@ public class Client extends JFrame {
    }
 
    /**
-    * Returns the gameLogic instance variable.
-    * @return glClient
+    * Gets an updated BoardInformation object from the GameLogic.
+    * BoardInformation obtains its values in it's default constructor.
+    * @return an updated BoardInformation object
     */
-   public GameLogic getGlClient() {
-      return glClient;
+   public GameLogic.BoardInformation getBoardInformation() {
+      return glClient.getUpdatedBoardInformation();
    }
 
    /**
@@ -329,7 +457,7 @@ public class Client extends JFrame {
                case DataWrapper.STRINGCODE:
                   String incomingMsg = dw.getMessage();
                   //If boolean isGameMessage is true, display the message in the game messages area.
-                  if(dw.isGameMessage) {
+                  if(dw.getIsGameMessage()) {
                      gmLog.append(incomingMsg).append("\n");
                      jtaDisplayGM.setText(gmLog.toString());
                   //Else, display the message in the chat messages area.
@@ -339,14 +467,11 @@ public class Client extends JFrame {
                   }
                   break;
 
-               //Handle GameLogic boards
-               case DataWrapper.GLCODE:
-                  clearBoard();
-                  glClient = dw.getGL();
-                  System.out.println(glClient.toString());
-                  addBoard(glClient);
-                  revalidate();
-                  repaint();
+               //Handle updated BoardInformation
+               case DataWrapper.BICODE:
+                  System.out.println("Recieved a BoardInformation:");
+                  System.out.println(dw.getBoardInformation().toString());
+                  glClient.unpackBoardInformation(dw.getBoardInformation());
                   break;
 
                //Handle incoming ControlToken objects
@@ -365,6 +490,7 @@ public class Client extends JFrame {
 
                      //Add the player to the starting tile if they're not already on the board
                      case ControlToken.ADDCODE:
+                        System.out.println("print an add request");
                         if(!glClient.containsPlayer(ct.getPlayerName())) {
                            GameLogic.Player playerToBeAdded = glClient.new Player(ct.getPlayerName(), ct.getPawnCode());
                            glClient.addToBoard(
@@ -395,26 +521,15 @@ public class Client extends JFrame {
                         }
                         break;
 
-                     //Send GameLogic to the server
+                     //Write BoardInformation to the server
                      case ControlToken.BOARDREQUEST:
-                        //Include a 500ms delay so the client can add the connecting player before it sends the board
-                        TimerTask ttSendBoard = new TimerTask() {
-                           @Override
-                           public void run() {
-                              try {
-                                 System.out.println("Writing glClient to server...");
-                                 System.out.println(getGlClient().toString());
-                                 oos.reset();
-                                 oos.writeObject(new DataWrapper(DataWrapper.GLCODE, getGlClient()));
-                                 oos.flush();
-                              } catch (IOException e) {
-                                 e.printStackTrace();
-                              }
-                           }
-                        };
-                        java.util.Timer timer = new java.util.Timer();
-                        timer.schedule(ttSendBoard, 750);
-
+                        try {
+                           oos.reset();
+                           oos.writeObject(new DataWrapper(DataWrapper.BICODE, getBoardInformation()));
+                           oos.flush();
+                        } catch (IOException ioe) {
+                           ioe.printStackTrace();
+                        }
                         break;
 
                      default:

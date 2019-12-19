@@ -2,6 +2,9 @@ import java.io.Serializable;
 
 /**
  * A wrapper class for messages/tokens to be sent.
+ * Team Javadox
+ * @author Alan Chu
+ * @version 20191218
  */
 public class DataWrapper implements Serializable{
    /*
@@ -11,13 +14,12 @@ public class DataWrapper implements Serializable{
     * Code for GameLogic object: 3
     */
    private static final long serialVersionUID = 40L;
-   protected static final int STRINGCODE = 0, RRCODE = 1, CTCODE = 2, GLCODE = 3;
+   protected static final int STRINGCODE = 0, CTCODE = 1, BICODE = 2; //RRCODE is deprecated
    private int type;
-   String message;
-   RollRequest rr;
-   ControlToken ct;
-   boolean isGameMessage;
-   GameLogic gl;
+   private String message;
+   private ControlToken ct;
+   private boolean isGameMessage;
+   private GameLogic.BoardInformation bi;
 
    /** 
     * A constructor for the DataWrapper class.
@@ -30,18 +32,7 @@ public class DataWrapper implements Serializable{
       this.message = message;
       this.isGameMessage = _isGameMessage;
    }
-   
-   /** 
-    * A constructor for the DataWrapper class.
-    * Accepts a RollRequest.
-    * @param type the type code of Object being sent
-    * @param rr the RollRequest to be sent.
-    */
-   public DataWrapper(int type, RollRequest rr){
-      this.type = type;
-      this.rr = rr;
-   }
-   
+
    /** 
     * A constructor for the DataWrapper class.
     * Accepts a ControlToken.
@@ -54,9 +45,9 @@ public class DataWrapper implements Serializable{
    }
 
 
-   public DataWrapper(int type, GameLogic gameLogic){
+   public DataWrapper(int type, GameLogic.BoardInformation boardInfo){
       this.type = type;
-      gl = gameLogic;
+      bi = boardInfo;
    }
 
    /**
@@ -74,15 +65,7 @@ public class DataWrapper implements Serializable{
    public String getMessage(){
       return message;
    }
-   
-   /**
-    * Returns the RollRequest to be sent.
-    * @return rr the RollRequest to be sent
-    */
-   public RollRequest getRR(){
-      return rr;
-   }
-   
+
    /**
     * Returns the ControlToken to be sent.
     * @return ct the ControlToken to be sent
@@ -91,6 +74,13 @@ public class DataWrapper implements Serializable{
       return ct;
    }
 
-   public GameLogic getGL() { return gl; }
+   public GameLogic.BoardInformation getBoardInformation(){
+      return bi;
+   }
+
+   public boolean getIsGameMessage() {
+      return isGameMessage;
+   }
+
    
 }
