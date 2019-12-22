@@ -340,8 +340,9 @@ public class Client extends JFrame {
       timer.start();
 
       //Initialize the JFrame
-//      pack();
-      gameGUI.setSize(1350, 900);
+      gameGUI.setTitle("Portals Game Client");
+      gameGUI.pack();
+//      gameGUI.setSize(1350, 900);
       gameGUI.setDefaultCloseOperation(EXIT_ON_CLOSE);
       gameGUI.setVisible(true);
       gameGUI.setLocationRelativeTo(null);
@@ -356,8 +357,11 @@ public class Client extends JFrame {
       jtaHelp.setFont(new Font("Verdana", Font.PLAIN, 14));
       jtaHelp.setEditable(false);
       jtaHelp.setText(String.format("--- HOW TO PLAY ---\n" +
-              "1. The host will start the server on their machine and gives the \n" +
-              "   other players the IP to connect with.\n" +
+              "1. The host will start the server on their machine and gives the other players the \n" +
+              "   IP to connect with. \n" +
+              "   \n" +
+              "   If Servers and Clients are not started from the same network, you will have to\n" +
+              "   forward port 4242 and connect using the Server's public IP.\n" +
               "   \n" +
               "2. Players launch their clients, enter the server IP, and type their desired alias.\n" +
               "\n" +

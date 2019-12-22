@@ -112,6 +112,7 @@ public class Server extends JFrame{
    
    /**
     * The main method.
+    * @param args arguments from the command line
     */
    public static void main(String[] args) {
       new Server();
@@ -574,33 +575,38 @@ public class Server extends JFrame{
       }
 
       public void run(){
-
+         String lastPlayer = "";
          while(true){
             String currentPlayer = turnQueue.peek();
             ClientHandler chPlayer;
 
-            sendGMToAll(String.format("It is now %s's turn.", currentPlayer));
-            chPlayer = clientThreads.get(getIndex(currentPlayer));
-            chPlayer.enableClient();
+            //If the player is not in the clientThreads vector, or there is a duplicate, remove them from the queue
+            if(getIndex(currentPlayer) == -1 || currentPlayer.equals(lastPlayer)){
+               turnQueue.remove();
+            //Otherwise, proceed with enabling/disabling the Client and turn control.
+            } else {
+               sendGMToAll(String.format("It is now %s's turn.", currentPlayer));
+               chPlayer = clientThreads.get(getIndex(currentPlayer));
+               chPlayer.enableClient();
 
-            synchronized (turnFinishedLock) {
-               while (!turnFinished) {
+               synchronized (turnFinishedLock) {
+                  while (!turnFinished) {
 //                     System.out.println("Thread " + this.getName() + " waiting for a TurnFinished token..");
-                  try {
-                     turnFinishedLock.wait();
-                  } catch (InterruptedException ioe) {
-                     ioe.printStackTrace();
+                     try {
+                        turnFinishedLock.wait();
+                     } catch (InterruptedException ioe) {
+                        ioe.printStackTrace();
+                     }
                   }
+                  chPlayer.disableClient();
+                  turnFinished = false; //resetting turnFinished
                }
-               chPlayer.disableClient();
-               turnFinished = false; //resetting turnFinished
+
+
+               lastPlayer = turnQueue.remove();
+               sendGMToAll(String.format("%s has finished their turn.", currentPlayer));
+               turnQueue.add(currentPlayer);
             }
-
-
-            turnQueue.remove();
-            sendGMToAll(String.format("%s has finished their turn.", currentPlayer));
-            turnQueue.add(currentPlayer);
-
          }
       }
    }

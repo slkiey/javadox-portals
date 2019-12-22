@@ -26,6 +26,7 @@ public class DataWrapper implements Serializable{
     * Accepts a message.
     * @param type the type code of Object being sent
     * @param message the message to be sent.
+    * @param _isGameMessage if this message should be displayed as a game message
     */
    public DataWrapper(int type, String message, boolean _isGameMessage ){
       this.type = type;

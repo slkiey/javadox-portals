@@ -19,6 +19,7 @@ import java.util.Vector;
  */
 public class GameLogic extends JPanel implements Serializable {
     private BoardTile[][] board;
+    private final int PANEL_SIZE = 700;
     private final int BOARD_SIZE;
     private static final long serialVersionUID = 41L;
     private Vector<Player> playerVector = new Vector<>();
@@ -33,12 +34,13 @@ public class GameLogic extends JPanel implements Serializable {
     /**
      * Construct the GUI and make a board with the specified parameters.
      * @param boardSize the side length of the board
+     * @param generatePortals to generate portals or not
      */
     public GameLogic(int boardSize, boolean generatePortals) {
         BOARD_SIZE = boardSize;
 
         //Panel initialization
-        Dimension panelSz = new Dimension(800,800);
+        Dimension panelSz = new Dimension(PANEL_SIZE,PANEL_SIZE);
         setPreferredSize(panelSz);
         setMinimumSize(panelSz);
         setMaximumSize(panelSz);
@@ -49,7 +51,7 @@ public class GameLogic extends JPanel implements Serializable {
         for (int i = 0; i < BOARD_SIZE; i++) {
             for (int j = 0; j < BOARD_SIZE; j++) {
                 BoardTile jpIJ = new BoardTile(i, j);
-                Dimension squareSize = new Dimension(800 / BOARD_SIZE, 800 / BOARD_SIZE);
+                Dimension squareSize = new Dimension(PANEL_SIZE / BOARD_SIZE, PANEL_SIZE / BOARD_SIZE);
                 jpIJ.setPreferredSize(squareSize);
                 jpIJ.setMinimumSize(squareSize);
                 jpIJ.setMaximumSize(squareSize);
@@ -118,6 +120,7 @@ public class GameLogic extends JPanel implements Serializable {
 
     /**
      * Adds this Player to the Player Vector in the GameLogic class.
+     * @param player the player to be added
      */
     protected void addToPlayersVector(Player player){
         playerVector.add(player);
@@ -344,7 +347,8 @@ public class GameLogic extends JPanel implements Serializable {
                 ioe.printStackTrace();
             }
             //Resize the image according to the board size
-            resizedPawnImage = biPawnImage.getScaledInstance(800 / BOARD_SIZE / 4, 800 / BOARD_SIZE / 4, Image.SCALE_DEFAULT);
+            resizedPawnImage = biPawnImage.getScaledInstance(
+                    PANEL_SIZE / BOARD_SIZE / 4, PANEL_SIZE / BOARD_SIZE / 4, Image.SCALE_DEFAULT);
             iiPawnImage = new ImageIcon(resizedPawnImage);
             return iiPawnImage;
         }
@@ -363,6 +367,8 @@ public class GameLogic extends JPanel implements Serializable {
          * Moves the player on the board according to the Snakes and Ladders
          * movement pattern.
          * @param positions number of tiles to move
+         * @param ignorePortals to ignore portals or not
+         * @param invokingPlayer the client who invoked this method
          */
         protected void move(int positions, boolean ignorePortals, String invokingPlayer) {
             int[] endPositions = getEndPosition(positions);
@@ -462,6 +468,7 @@ public class GameLogic extends JPanel implements Serializable {
          * Moves a single tile x number of times.
          * Calls the move() method.
          * @param positions the number of tiles to move
+         * @param invokingPlayer the client who invoked this method
          */
         protected void moveOneByOne(int positions, String invokingPlayer) {
             int[] endPositions = getEndPosition(positions);
@@ -534,7 +541,8 @@ public class GameLogic extends JPanel implements Serializable {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            tileIcon = new ImageIcon(tileImage.getScaledInstance(800 / BOARD_SIZE, 800 / BOARD_SIZE, Image.SCALE_DEFAULT));
+            tileIcon = new ImageIcon(tileImage.getScaledInstance(
+                    PANEL_SIZE / BOARD_SIZE, PANEL_SIZE / BOARD_SIZE, Image.SCALE_DEFAULT));
         }
 
         /**
@@ -600,7 +608,7 @@ public class GameLogic extends JPanel implements Serializable {
                 e.printStackTrace();
             }
             portalIcon = new ImageIcon(
-                    portalImage.getScaledInstance(800 / BOARD_SIZE, 800 / BOARD_SIZE, Image.SCALE_DEFAULT));
+                    portalImage.getScaledInstance(PANEL_SIZE / BOARD_SIZE, PANEL_SIZE / BOARD_SIZE, Image.SCALE_DEFAULT));
         }
 
         /**
